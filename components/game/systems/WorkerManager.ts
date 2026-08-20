@@ -100,6 +100,19 @@ export class WorkerManager {
     return this.workers.find((worker) => worker.seatId === seatId) ?? null;
   }
 
+  /**
+   * Find the worker that owns a run. runWorkerMap is cleared the moment a task
+   * completes, but a final reply can arrive just after, so fall back to the
+   * worker still holding the run while it shows its result.
+   */
+  findByRunId(runId: string): Worker | null {
+    return (
+      this.runWorkerMap.get(runId) ??
+      this.workers.find((worker) => worker.assignedRunId === runId) ??
+      null
+    );
+  }
+
   findIdle(): Worker | null {
     return this.workers.find((worker) => worker.status === "idle") ?? null;
   }

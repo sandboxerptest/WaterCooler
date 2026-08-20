@@ -57,7 +57,9 @@ export interface WorkerCtx {
   taskVisualTimer: Phaser.Time.TimerEvent | null;
 
   // Methods the sub-modules may call on Worker
-  showBubble(message: string, ttl?: number): void;
+  showBubble(message: string, ttl?: number, followWithDots?: boolean): void;
+  showThinkingBubble(): void;
+  hideThinkingBubble(): void;
   showEmote(emoteKey: string): void;
   hideEmote(): void;
   setStatus(status: WorkerStatus): void;

@@ -1,4 +1,4 @@
-import { TASK_RESULT_HOLD_MS, TASK_BUBBLE_MS, TASK_THINK_DELAY_MS } from "@/lib/constants";
+import { TASK_RESULT_HOLD_MS, TASK_BUBBLE_MS } from "@/lib/constants";
 import { isAtHomePose } from "./movement";
 import type { WorkerCtx } from "./types";
 
@@ -14,16 +14,16 @@ export function assignTask(
   ctx.setStatus("working");
 
   const beginProcessing = () => {
-    ctx.showBubble(`📋 ${taskMessage}`, TASK_BUBBLE_MS);
+    // The acknowledgement bubble turns into blinking dots when it expires, and
+    // the dots stay up until the agent's reply replaces them. The handoff runs
+    // on the bubble's own timer rather than a scene timer, so it keeps working
+    // when the scene clock is paused (backgrounded tab).
+    ctx.showBubble(`📋 ${taskMessage}`, TASK_BUBBLE_MS, true);
     onReady?.();
     if (ctx.taskVisualTimer) {
       ctx.taskVisualTimer.destroy();
       ctx.taskVisualTimer = null;
     }
-    ctx.taskVisualTimer = ctx.scene.time.delayedCall(TASK_THINK_DELAY_MS, () => {
-      if (ctx._status === "working") ctx.showEmote("emote:dots");
-      ctx.taskVisualTimer = null;
-    });
   };
 
   const shouldReturnHomeFirst = ctx.moveTarget !== null || !isAtHomePose(ctx) || ctx.isWandering;
@@ -46,6 +46,8 @@ export function completeTask(ctx: WorkerCtx) {
     ctx.taskVisualTimer.destroy();
     ctx.taskVisualTimer = null;
   }
+  // The reply bubble replaces the dots; drop them if no reply text arrives.
+  ctx.hideThinkingBubble();
   ctx.currentTaskMessage = null;
   ctx.setStatus("done");
 

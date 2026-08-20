@@ -3,6 +3,39 @@ import * as Phaser from "phaser";
 const BUBBLE_MAX_WIDTH = 300;
 const FADE_DURATION = 400;
 const DEFAULT_TTL = 5000;
+const THINKING_STYLE_ID = "game-bubble-thinking-style";
+
+/**
+ * The bubble is a plain DOM node styled inline, so the dot animation needs a
+ * real stylesheet. Injected once per document, on first use.
+ */
+function ensureThinkingStyles() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(THINKING_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = THINKING_STYLE_ID;
+  style.textContent = `
+    .game-bubble__dots { display: inline-flex; gap: 4px; align-items: center; padding: 2px 0; }
+    .game-bubble__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.25;
+      animation: game-bubble-blink 1.2s infinite ease-in-out;
+    }
+    .game-bubble__dot:nth-child(2) { animation-delay: 0.2s; }
+    .game-bubble__dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes game-bubble-blink {
+      0%, 60%, 100% { opacity: 0.25; }
+      30% { opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .game-bubble__dot { animation: none; opacity: 0.6; }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export class ChatBubble {
   private el: HTMLDivElement;
@@ -12,6 +45,7 @@ export class ChatBubble {
   private _visible = false;
   private fadeTimeout: ReturnType<typeof setTimeout> | null = null;
   private fadeRaf: ReturnType<typeof requestAnimationFrame> | null = null;
+  private dotsEl: HTMLSpanElement | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -63,10 +97,22 @@ export class ChatBubble {
     }
   }
 
-  show(message: string, anchorX: number, anchorY: number, ttl = DEFAULT_TTL) {
+  /**
+   * @param followWithDots keep the bubble alive as blinking dots once `ttl`
+   * expires, instead of fading out — used while a task is still running.
+   */
+  show(
+    message: string,
+    anchorX: number,
+    anchorY: number,
+    ttl = DEFAULT_TTL,
+    followWithDots = false,
+  ) {
     this.clearTimers();
 
     const displayText = message.length > 100 ? message.slice(0, 97) + "..." : message;
+
+    this.clearDots();
 
     // Set text (first child is text node, then tail div)
     const existing = this.el.firstChild;
@@ -90,12 +136,63 @@ export class ChatBubble {
     if (ttl > 0) {
       this.fadeTimeout = setTimeout(() => {
         this.fadeTimeout = null;
+        if (followWithDots) {
+          this.showThinking(this.worldX, this.worldY);
+          return;
+        }
         this.el.style.opacity = "0";
         this.fadeTimeout = setTimeout(() => {
           this.el.style.display = "none";
           this._visible = false;
         }, FADE_DURATION);
       }, ttl);
+    }
+  }
+
+  /**
+   * Show an open-ended "thinking" bubble: three blinking dots, no TTL. Stays up
+   * until show() replaces it with the reply, or hide() clears it.
+   */
+  showThinking(anchorX: number, anchorY: number) {
+    this.clearTimers();
+    ensureThinkingStyles();
+
+    // Drop any previous text so only the dots remain
+    const existing = this.el.firstChild;
+    if (existing && existing.nodeType === Node.TEXT_NODE) existing.textContent = "";
+
+    if (!this.dotsEl) {
+      const dots = document.createElement("span");
+      dots.className = "game-bubble__dots";
+      for (let i = 0; i < 3; i++) {
+        const dot = document.createElement("span");
+        dot.className = "game-bubble__dot";
+        dots.appendChild(dot);
+      }
+      this.dotsEl = dots;
+      this.el.insertBefore(dots, this.el.firstChild);
+    }
+
+    this.worldX = anchorX;
+    this.worldY = anchorY;
+    this._visible = true;
+
+    this.el.style.display = "block";
+    void this.el.offsetHeight;
+    this.el.style.opacity = "1";
+
+    this.syncPosition();
+  }
+
+  /** True while the blinking-dots bubble is the one on screen. */
+  get isThinking() {
+    return this._visible && this.dotsEl !== null;
+  }
+
+  private clearDots() {
+    if (this.dotsEl) {
+      this.dotsEl.remove();
+      this.dotsEl = null;
     }
   }
 
@@ -107,6 +204,7 @@ export class ChatBubble {
 
   hide() {
     this.clearTimers();
+    this.clearDots();
     this.el.style.opacity = "0";
     this.el.style.display = "none";
     this._visible = false;
@@ -114,6 +212,7 @@ export class ChatBubble {
 
   destroy() {
     this.clearTimers();
+    this.clearDots();
     this.el.remove();
   }
 

@@ -821,6 +821,46 @@ describe("wireGatewayClient", () => {
         expect(finalizes[0].content).toBe("The answer is 42.");
       });
 
+      it("shows the finished reply in the worker's bubble", () => {
+        const refs = createRefs();
+        const client = createMockClient();
+        wireGatewayClient(client as never, refs);
+
+        client._emit("chat", {
+          runId: "run-1",
+          state: "final",
+          message: {
+            content: [{ type: "text", text: "The answer is 42." }],
+          },
+        });
+
+        expect(gameEvents.emit).toHaveBeenCalledWith(
+          "task-bubble",
+          "run-1",
+          "The answer is 42.",
+          8000,
+        );
+      });
+
+      it("emits no bubble for a final with no text content", () => {
+        const refs = createRefs();
+        const client = createMockClient();
+        wireGatewayClient(client as never, refs);
+
+        client._emit("chat", {
+          runId: "run-1",
+          state: "final",
+          message: {
+            content: [{ type: "image", text: undefined }],
+          },
+        });
+
+        const bubbleCalls = (
+          gameEvents.emit as unknown as ReturnType<typeof vi.fn>
+        ).mock.calls.filter((call: unknown[]) => call[0] === "task-bubble");
+        expect(bubbleCalls).toHaveLength(0);
+      });
+
       it("skips FINALIZE_ASSISTANT when no text content", () => {
         const refs = createRefs();
         const client = createMockClient();

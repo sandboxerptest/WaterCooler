@@ -317,11 +317,24 @@ export class Worker implements WorkerCtx {
 
   // ── Bubble ────────────────────────────────────────────
 
-  showBubble(message: string, ttl = 5000) {
+  showBubble(message: string, ttl = 5000, followWithDots = false) {
     this.hideEmote();
     const bubbleX = this.sprite.x;
     const bubbleY = this.sprite.y - FRAME_HEIGHT * BUBBLE_Y_OFFSET;
-    this.bubble.show(message, bubbleX, bubbleY, ttl);
+    this.bubble.show(message, bubbleX, bubbleY, ttl, followWithDots);
+  }
+
+  /** Blinking dots that stay up until the agent's reply replaces them. */
+  showThinkingBubble() {
+    this.hideEmote();
+    const bubbleX = this.sprite.x;
+    const bubbleY = this.sprite.y - FRAME_HEIGHT * BUBBLE_Y_OFFSET;
+    this.bubble.showThinking(bubbleX, bubbleY);
+  }
+
+  /** Clear the dots if they are still showing (e.g. a run ended silently). */
+  hideThinkingBubble() {
+    if (this.bubble.isThinking) this.bubble.hide();
   }
 
   // ── Public helpers ────────────────────────────────────

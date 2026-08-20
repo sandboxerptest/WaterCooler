@@ -27,6 +27,9 @@ import { createLogger } from "./logger";
 
 const log = createLogger("Gateway");
 
+/** How long an agent's completed reply stays up in its in-world bubble. */
+const FINAL_BUBBLE_MS = 8000;
+
 const SUBAGENT_KEY_RE = /subagent:/;
 const BUBBLE_THROTTLE_MS = 150;
 const MAX_BUBBLE_ACCUM = 50_000;
@@ -387,6 +390,10 @@ export function wireGatewayClient(client: GatewayClient, refs: HandlerRefs) {
       }
       const content = p.message?.content;
       const text = content?.find((c) => c.type === "text")?.text;
+      // Show the finished reply in-world. Providers that stream deltas have been
+      // filling the bubble already; ones that answer in a single shot (the CLI
+      // bridge) have shown only blinking dots until now.
+      if (text) gameEvents.emit("task-bubble", runId, text, FINAL_BUBBLE_MS);
       // Emit task-completed for the Phaser worker if lifecycle end didn't already do it.
       // This acts as a defensive fallback — lifecycle end may not arrive (e.g. provider quirks).
       if (!refs.seenStarts.has(runId)) {

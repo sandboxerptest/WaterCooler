@@ -65,7 +65,7 @@ export function initSceneEventBridge(
 
   unsubs.push(
     gameEvents.on("task-bubble", (runId, text, ttl) => {
-      const worker = workerManager.runWorkerMap.get(runId);
+      const worker = workerManager.findByRunId(runId);
       if (worker) worker.showBubble(text, ttl ?? 5000);
     }),
   );
