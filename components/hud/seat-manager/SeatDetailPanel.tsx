@@ -1,5 +1,6 @@
 "use client";
 
+import MicButton from "../MicButton";
 import type { SeatState, SeatType, AgentConfig } from "@/types/game";
 import CharacterPortrait from "../CharacterPortrait";
 import SpritePreview from "./SpritePreview";
@@ -134,14 +135,22 @@ export default function SeatDetailPanel({
           >
             <div>
               <label className="hud-panel__label">Name</label>
-              <input
-                className="pixel-input hud-panel__input"
-                value={effectiveName}
-                onChange={(event) => onNameChange(event.target.value)}
-                disabled={busy}
-                placeholder="Crew name"
-                style={{ minHeight: 0 }}
-              />
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  className="pixel-input hud-panel__input"
+                  value={effectiveName}
+                  onChange={(event) => onNameChange(event.target.value)}
+                  disabled={busy}
+                  placeholder="Crew name"
+                  style={{ minHeight: 0, flex: 1 }}
+                />
+                <MicButton
+                  onTranscript={(text) => onNameChange(text)}
+                  disabled={busy}
+                  size={28}
+                  what="name"
+                />
+              </div>
             </div>
             {effectiveSeatType === "agent" && (
               <div>
@@ -200,14 +209,22 @@ export default function SeatDetailPanel({
           </div>
           <div>
             <label className="hud-panel__label">Role / Title</label>
-            <input
-              className="pixel-input hud-panel__input"
-              value={effectiveRoleTitle}
-              onChange={(event) => onRoleTitleChange(event.target.value)}
-              disabled={busy}
-              placeholder="Role title"
-              style={{ minHeight: 0 }}
-            />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                className="pixel-input hud-panel__input"
+                value={effectiveRoleTitle}
+                onChange={(event) => onRoleTitleChange(event.target.value)}
+                disabled={busy}
+                placeholder="Role title"
+                style={{ minHeight: 0, flex: 1 }}
+              />
+              <MicButton
+                onTranscript={(text) => onRoleTitleChange(text)}
+                disabled={busy}
+                size={28}
+                what="role"
+              />
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {ROLE_PRESETS.map((preset) => (
                 <button

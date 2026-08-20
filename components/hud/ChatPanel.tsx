@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Mic, SendHorizontal } from "lucide-react";
+import { SendHorizontal } from "lucide-react";
 import { useStudio } from "@/lib/store";
-import { useSpeechInput } from "@/lib/hooks/useSpeechInput";
+import MicButton from "./MicButton";
 import { gameEvents } from "@/lib/events";
 import type { ChatMessage, SessionRecord, TaskItem } from "@/types/game";
 import { findTask } from "@/lib/reducer";
@@ -57,32 +57,10 @@ export default function ChatPanel({
     }
   }, [messages.length, virtualizer]);
 
-  const speech = useSpeechInput();
-  const listening = speech.status === "listening";
-
-  // Push-to-talk: hold the mic, speak, release. The transcript lands in the
-  // input for review rather than being sent, so a mis-hearing never becomes an
-  // agent run on its own.
-  const startTalking = () => {
-    if (!isConnected || !speech.supported) return;
-    speech.start();
-  };
-
-  const stopTalking = () => {
-    if (!listening) return;
-    const text = speech.stop();
-    if (!text) return;
+  const appendDictation = (text: string) => {
     setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
     requestAnimationFrame(() => inputRef.current?.focus());
   };
-
-  const micTitle = !speech.supported
-    ? "Speech recognition needs Chrome or Safari"
-    : speech.error === "not-allowed"
-      ? "Microphone permission was denied"
-      : listening
-        ? "Listening — release to insert"
-        : "Hold to talk";
 
   const handleSend = () => {
     const trimmed = input.trim();
@@ -151,19 +129,6 @@ export default function ChatPanel({
           )}
         </div>
 
-        {listening && (
-          <div
-            style={{
-              fontSize: "8px",
-              color: "var(--pixel-muted)",
-              padding: "2px 4px",
-              minHeight: 12,
-            }}
-          >
-            🎙 {speech.transcript || "Listening…"}
-          </div>
-        )}
-
         <div className="hud-chat-input-row">
           <textarea
             ref={inputRef}
@@ -175,27 +140,7 @@ export default function ChatPanel({
             onKeyDown={handleKeyDown}
             disabled={!isConnected}
           />
-          <button
-            type="button"
-            className="pixel-icon-btn"
-            style={{
-              width: 40,
-              height: 40,
-              minWidth: 40,
-              minHeight: 40,
-              color: listening ? "var(--pixel-red)" : undefined,
-            }}
-            onPointerDown={startTalking}
-            onPointerUp={stopTalking}
-            onPointerLeave={stopTalking}
-            onPointerCancel={stopTalking}
-            disabled={!isConnected || !speech.supported}
-            title={micTitle}
-            aria-label={micTitle}
-            aria-pressed={listening}
-          >
-            <Mic size={16} />
-          </button>
+          <MicButton onTranscript={appendDictation} disabled={!isConnected} what="message" />
           <button
             type="button"
             className="pixel-icon-btn pixel-icon-btn--primary"

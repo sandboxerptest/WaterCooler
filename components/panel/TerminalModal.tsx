@@ -1,5 +1,6 @@
 "use client";
 
+import MicButton from "@/components/hud/MicButton";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useStudio } from "@/lib/store";
 import { gameEvents } from "@/lib/events";
@@ -138,14 +139,23 @@ export default function TerminalModal() {
             disabled={!isConnected}
             style={{ minHeight: "48px" }}
           />
-          <button
-            className="pixel-button pixel-button--primary w-full"
-            style={{ marginTop: "8px" }}
-            onClick={handleSubmit}
-            disabled={!isConnected || !input.trim()}
-          >
-            Assign
-          </button>
+          <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "stretch" }}>
+            <button
+              className="pixel-button pixel-button--primary"
+              style={{ flex: 1 }}
+              onClick={handleSubmit}
+              disabled={!isConnected || !input.trim()}
+            >
+              Assign
+            </button>
+            <MicButton
+              onTranscript={(text) =>
+                setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+              }
+              disabled={!isConnected}
+              what="task"
+            />
+          </div>
         </div>
       </div>
     </div>
