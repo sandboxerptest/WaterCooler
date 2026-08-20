@@ -28,7 +28,10 @@ export interface BgmState {
 }
 
 export function useBgm(): BgmState {
-  const [volume, setVolume] = useState(() => clampVolume(loadBgmVolume()));
+  // Start from the default so the first client render matches the server's.
+  // localStorage is unavailable during SSR, so reading it here would render a
+  // different icon on the client and break hydration.
+  const [volume, setVolume] = useState(DEFAULT_BGM_VOLUME);
   const volumeRef = useRef(volume);
 
   useEffect(() => {
@@ -36,12 +39,14 @@ export function useBgm(): BgmState {
   }, [volume]);
 
   useEffect(() => {
+    // Adopt the persisted volume once mounted, then start playback with it.
+    const stored = clampVolume(loadBgmVolume());
+    setVolume(stored);
     const audio = getAudio();
-    audio.volume = volume;
-    if (volume > 0) {
+    audio.volume = stored;
+    if (stored > 0) {
       audio.play().catch(() => {});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on mount
   }, []);
 
   useEffect(() => {
