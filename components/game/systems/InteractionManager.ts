@@ -133,7 +133,8 @@ export class InteractionManager {
   }
 
   /** Run proximity detection and prompt display in the update loop. */
-  updateProximity(eKey: Phaser.Input.Keyboard.Key): boolean {
+  /** @param interactPressed true on the frame E or the pad's confirm button fires. */
+  updateProximity(interactPressed: boolean): boolean {
     const nearest = this.findNearestWorker();
 
     if (nearest !== this.nearestWorker) {
@@ -154,8 +155,8 @@ export class InteractionManager {
       }
     }
 
-    // E key: worker menu takes priority over boss terminal
-    if (nearest && Phaser.Input.Keyboard.JustDown(eKey)) {
+    // Interact: worker menu takes priority over boss terminal
+    if (nearest && interactPressed) {
       this.openWorkerMenu(nearest);
       if (this.workerPromptText) this.workerPromptText.setVisible(false);
       return true; // signal: handled interaction

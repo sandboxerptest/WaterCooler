@@ -82,7 +82,11 @@ export class Player {
     return body.velocity.x !== 0 || body.velocity.y !== 0;
   }
 
-  update() {
+  /**
+   * @param padVelocity movement from a connected gamepad; used when the
+   * keyboard is idle, so either input can drive the player at any time.
+   */
+  update(padVelocity?: { vx: number; vy: number }) {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     const speed = MOVE_SPEED;
 
@@ -101,6 +105,11 @@ export class Player {
       const factor = Math.SQRT1_2;
       vx *= factor;
       vy *= factor;
+    }
+
+    if (vx === 0 && vy === 0 && padVelocity) {
+      vx = padVelocity.vx;
+      vy = padVelocity.vy;
     }
 
     body.setVelocity(vx, vy);

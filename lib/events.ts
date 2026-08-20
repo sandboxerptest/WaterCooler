@@ -13,6 +13,9 @@ export interface GameEventMap {
   "task-bound": [taskId: string, runId: string];
   "task-staged": [taskId: string, stage: "queued" | "returning", seatId?: string];
   "task-bubble": [runId: string, text: string, ttl: number];
+  /** Gamepad shoulder buttons cycle HUD panels; Back closes the open one. */
+  "hud-cycle-panel": [direction: -1 | 1];
+  "hud-close-panel": [];
   "task-aborted": [runId: string];
   "task-completed": [runId: string];
   "task-failed": [runId: string];

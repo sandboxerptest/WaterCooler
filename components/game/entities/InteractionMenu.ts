@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import type { GamepadInput } from "../systems/GamepadInput";
 
 export interface MenuOption {
   label: string;
@@ -154,7 +155,7 @@ export class InteractionMenu {
     this.clearItems();
   }
 
-  update() {
+  update(pad?: GamepadInput) {
     if (!this._visible) return;
 
     const elapsed = this.scene.game.getFrame() - this.openFrame;
@@ -162,19 +163,24 @@ export class InteractionMenu {
 
     if (
       Phaser.Input.Keyboard.JustDown(this.upKey) ||
-      Phaser.Input.Keyboard.JustDown(this.upArrow)
+      Phaser.Input.Keyboard.JustDown(this.upArrow) ||
+      pad?.justPressed("menuUp") ||
+      pad?.menuDirectionEdge() === -1
     ) {
       this.moveSelection(-1);
     } else if (
       Phaser.Input.Keyboard.JustDown(this.downKey) ||
-      Phaser.Input.Keyboard.JustDown(this.downArrow)
+      Phaser.Input.Keyboard.JustDown(this.downArrow) ||
+      pad?.justPressed("menuDown") ||
+      pad?.menuDirectionEdge() === 1
     ) {
       this.moveSelection(1);
     }
 
     if (
       Phaser.Input.Keyboard.JustDown(this.confirmKey) ||
-      Phaser.Input.Keyboard.JustDown(this.enterKey)
+      Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+      pad?.justPressed("interact")
     ) {
       const opt = this.options[this.selectedIndex];
       if (opt?.enabled) {
@@ -183,7 +189,7 @@ export class InteractionMenu {
       }
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.escKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.escKey) || pad?.justPressed("cancel")) {
       this.hide();
       this.onClose?.();
     }

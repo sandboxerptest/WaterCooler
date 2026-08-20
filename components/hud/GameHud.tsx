@@ -1,5 +1,6 @@
 "use client";
 
+import { gameEvents } from "@/lib/events";
 import "./hud.css";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -50,6 +51,35 @@ export default function GameHud() {
       setOpenPanel((prev) => (prev === "connection" ? null : prev));
     }
   }, [state.connection]);
+
+  // Gamepad shoulder buttons cycle the HUD panels; Back closes whatever is open
+  useEffect(() => {
+    const order: HudPanelId[] = ["chat", "music", "connection", "tasks", "workers"];
+
+    const unsubCycle = gameEvents.on("hud-cycle-panel", (direction) => {
+      setSeatManagerOpen(false);
+      setOpenPanel((prev) => {
+        const current = prev ? order.indexOf(prev) : -1;
+        const next = (current + direction + order.length) % order.length;
+        const id = order[next];
+        if (id === "workers") {
+          setSeatManagerOpen(true);
+          return null;
+        }
+        return id;
+      });
+    });
+
+    const unsubClose = gameEvents.on("hud-close-panel", () => {
+      setOpenPanel(null);
+      setSeatManagerOpen(false);
+    });
+
+    return () => {
+      unsubCycle();
+      unsubClose();
+    };
+  }, []);
 
   const activeSessionKey = state.activeSessionKey ?? MAIN_SESSION_KEY;
   const visibleTasks = useMemo(

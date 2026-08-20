@@ -14,6 +14,9 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.NO_CENTER,
   },
+  input: {
+    gamepad: true,
+  },
   physics: {
     default: "arcade",
     arcade: {

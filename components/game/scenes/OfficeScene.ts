@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { resetWanderClock } from "../entities/Worker";
-import { SPRITE_KEY, SPRITE_PATH, WORKER_SPRITES } from "../config/animations";
+import { SPRITE_KEY, SPRITE_PATH, WORKER_SPRITES, MOVE_SPEED } from "../config/animations";
 import { EMOTE_SHEET_KEY, EMOTE_SHEET_PATH, EMOTE_FRAME_SIZE } from "../config/emotes";
 import { Pathfinder } from "../utils/Pathfinder";
 import {
@@ -25,6 +25,7 @@ import {
 import { CameraController } from "../systems/CameraController";
 import { WorkerManager } from "../systems/WorkerManager";
 import { InteractionManager } from "../systems/InteractionManager";
+import { GamepadInput } from "../systems/GamepadInput";
 import { DoorManager } from "../systems/DoorManager";
 import { initSceneEventBridge } from "../systems/SceneEventBridge";
 
@@ -42,6 +43,7 @@ export class OfficeScene extends Phaser.Scene {
   private terminalZone: { x: number; y: number } | null = null;
   private promptText: Phaser.GameObjects.Text | null = null;
   private eKey!: Phaser.Input.Keyboard.Key;
+  private gamepad!: GamepadInput;
   private terminalOpen = false;
 
   /** sessionKey -> seatId: when a character executes a task, that session binds to the character */
@@ -182,6 +184,7 @@ export class OfficeScene extends Phaser.Scene {
     this.doorManager.initDoors();
 
     resetWanderClock();
+    this.gamepad = new GamepadInput(this);
     this.initBossSeat(bossSpawn);
 
     this.cleanupEventBridge = initSceneEventBridge(
@@ -235,11 +238,19 @@ export class OfficeScene extends Phaser.Scene {
   // ── Update ─────────────────────────────────────────────
 
   update() {
+    this.gamepad.poll();
+
     if (this.interactionManager.interactionMenu.visible) {
-      this.interactionManager.interactionMenu.update();
+      this.interactionManager.interactionMenu.update(this.gamepad);
       this.workerManager.updateAll();
       return;
     }
+
+    // Shoulder buttons cycle HUD panels, Back closes the open one. The HUD is
+    // React, so this travels over the event bus rather than through the scene.
+    if (this.gamepad.justPressed("panelPrev")) gameEvents.emit("hud-cycle-panel", -1);
+    if (this.gamepad.justPressed("panelNext")) gameEvents.emit("hud-cycle-panel", 1);
+    if (this.gamepad.justPressed("panelClose")) gameEvents.emit("hud-close-panel");
 
     if (this.terminalOpen || isInputFocused()) {
       this.workerManager.updateAll();
@@ -247,15 +258,18 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    this.player.update();
+    this.player.update(this.gamepad.velocity(MOVE_SPEED));
     if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
       this.cameraController.resumeCameraFollow();
     }
     this.workerManager.updateAll();
     this.doorManager.updateDoors();
 
-    // Worker proximity + E-key interaction
-    if (this.interactionManager.updateProximity(this.eKey)) {
+    // Worker proximity: E on the keyboard, or confirm on the pad
+    const interactPressed =
+      Phaser.Input.Keyboard.JustDown(this.eKey) || this.gamepad.justPressed("interact");
+
+    if (this.interactionManager.updateProximity(interactPressed)) {
       return;
     }
 
@@ -270,7 +284,7 @@ export class OfficeScene extends Phaser.Scene {
       const near = dist < BOSS_INTERACT_DISTANCE;
       this.promptText.setVisible(near);
 
-      if (near && Phaser.Input.Keyboard.JustDown(this.eKey)) {
+      if (near && interactPressed) {
         this.terminalOpen = true;
         this.promptText.setVisible(false);
         gameEvents.emit("open-terminal");
