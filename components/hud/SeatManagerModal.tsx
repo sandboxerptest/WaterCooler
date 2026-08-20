@@ -10,9 +10,10 @@ import { createLogger } from "@/lib/logger";
 const log = createLogger("SeatManager");
 import { WORKER_SPRITES } from "@/components/game/config/animations";
 import type { SeatState, SeatType, AgentConfig } from "@/types/game";
-import { getAgentProvider } from "@/lib/utils";
+import { isCliProvider, getProviderLabel } from "@/lib/utils";
 
-const IS_AUGGIE = getAgentProvider() === "auggie";
+const IS_CLI = isCliProvider();
+const PROVIDER_LABEL = getProviderLabel();
 import SeatList from "./seat-manager/SeatList";
 import SeatDetailPanel from "./seat-manager/SeatDetailPanel";
 
@@ -271,7 +272,8 @@ export default function SeatManagerModal({
           onSave={handleSave}
           onUnassign={handleUnassign}
           onClose={onClose}
-          isAuggie={IS_AUGGIE}
+          isCliProvider={IS_CLI}
+          providerLabel={PROVIDER_LABEL}
         />
       </div>
     </div>

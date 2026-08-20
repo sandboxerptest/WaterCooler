@@ -10,18 +10,20 @@ import next from "next";
 import { createLogger } from "./lib/logger";
 import { attachWsProxy } from "./lib/ws-proxy";
 import {
-  attachAuggieBridge,
+  attachCliBridge,
   dispatchToWorker,
   validateDispatchSecret,
   setWorkerRoster,
-} from "./lib/auggie-bridge";
+} from "./lib/cli-bridge";
+import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
 
 const log = createLogger("Server");
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "ws://127.0.0.1:18789/";
-const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "openclaw";
+const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "claude";
+const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER) ? getCliProvider(AGENT_PROVIDER) : null;
 // Expose provider to Next.js client code (compiled on-demand in dev)
 process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
 
@@ -121,7 +123,7 @@ app
   .then(() => {
     const server = createServer((req, res) => {
       // Intercept internal API routes before Next.js
-      if (AGENT_PROVIDER === "auggie") {
+      if (CLI_PROVIDER) {
         if (req.url === "/api/internal/dispatch") {
           handleDispatch(req, res);
           return;
@@ -134,10 +136,10 @@ app
       handle(req, res);
     });
 
-    if (AGENT_PROVIDER === "auggie") {
-      attachAuggieBridge(server);
+    if (CLI_PROVIDER) {
+      attachCliBridge(server, CLI_PROVIDER);
       log.info(`Ready on http://localhost:${port}`);
-      log.info(`Provider: Auggie (bridging via auggie CLI)`);
+      log.info(`Provider: ${CLI_PROVIDER.displayName} (bridging via ${CLI_PROVIDER.binName} CLI)`);
     } else {
       attachWsProxy(server, GATEWAY_URL);
       log.info(`Ready on http://localhost:${port}`);

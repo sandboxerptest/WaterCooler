@@ -7,7 +7,24 @@ import type { AgentProvider } from "@/types/game";
 export function getAgentProvider(): AgentProvider {
   const val = process.env.NEXT_PUBLIC_AGENT_PROVIDER;
   if (val === "auggie") return "auggie";
-  return "openclaw";
+  if (val === "openclaw") return "openclaw";
+  return "claude";
+}
+
+/**
+ * True when agents run through a local CLI rather than an OpenClaw gateway.
+ * CLI providers need no URL or token, so the app auto-connects to its own
+ * in-process bridge.
+ */
+export function isCliProvider(provider: AgentProvider = getAgentProvider()): boolean {
+  return provider === "auggie" || provider === "claude";
+}
+
+/** Human-readable provider name for HUD copy. */
+export function getProviderLabel(provider: AgentProvider = getAgentProvider()): string {
+  if (provider === "auggie") return "Auggie";
+  if (provider === "claude") return "Claude Code";
+  return "OpenClaw";
 }
 
 export function getDefaultGatewayUrl() {

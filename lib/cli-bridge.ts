@@ -1,9 +1,11 @@
 /**
- * Auggie Bridge — emulates the OpenClaw gateway protocol but delegates to the
- * `auggie` CLI for actual agent execution.
+ * CLI Bridge — emulates the OpenClaw gateway protocol but delegates to a local
+ * agent CLI (Claude Code or Auggie) for actual agent execution.
  *
  * Handles WebSocket upgrades, the connect/challenge handshake, chat send/abort,
- * session listing, and model listing by spawning `auggie` child processes.
+ * session listing, and model listing by spawning CLI child processes. Which CLI
+ * runs, and with what arguments, is decided by the provider descriptor passed to
+ * `attachCliBridge` — see cli-providers.ts.
  */
 
 import { type IncomingMessage } from "http";
@@ -14,8 +16,19 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
+import {
+  ensureSeatWorkspace,
+  getCliProvider,
+  parseJsonObject,
+  resolveBin,
+  type CliProvider,
+  type ModelChoice,
+} from "./cli-providers";
 
-const log = createLogger("Auggie Bridge");
+let log = createLogger("CLI Bridge");
+
+/** The active CLI provider. Replaced by attachCliBridge at startup. */
+let provider: CliProvider = getCliProvider("claude");
 
 let runCounter = 0;
 
@@ -46,7 +59,7 @@ interface ClientState {
   ws: WebSocket;
   seq: number;
   runningProcesses: Map<string, ChildProcess>;
-  /** Maps OpenClaw sessionKey → Auggie session_id for resume support */
+  /** Maps OpenClaw sessionKey → CLI session id for resume support */
   sessionMap: Map<string, string>;
 }
 
@@ -78,33 +91,6 @@ function sendResponse(
     frame.error = payloadOrError as GatewayFrame["error"];
   }
   sendFrame(state, frame);
-}
-
-/**
- * Parse JSON from auggie stdout. The CLI may emit non-JSON diagnostic lines
- * before the actual JSON object, so we search for the first `{` and try to
- * parse from there.
- */
-function parseAuggieOutput(raw: string): Record<string, unknown> | null {
-  const idx = raw.indexOf("{");
-  if (idx === -1) return null;
-  try {
-    return JSON.parse(raw.slice(idx)) as Record<string, unknown>;
-  } catch {
-    // Try line-by-line in case there's trailing output after the JSON
-    const lines = raw.split("\n");
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      if (line.startsWith("{")) {
-        try {
-          return JSON.parse(line) as Record<string, unknown>;
-        } catch {
-          continue;
-        }
-      }
-    }
-    return null;
-  }
 }
 
 // ── Origin check (same pattern as ws-proxy.ts) ─────────
@@ -147,25 +133,27 @@ function buildWorkerRosterContext(currentSeatLabel?: string): string {
   );
 }
 
-function buildPersonalityPrefix(params: Record<string, unknown>): string {
+/**
+ * Build the seat's persona as plain text. Providers decide where it goes —
+ * a system-prompt flag where one exists, otherwise prefixed to the message.
+ */
+function buildPersonality(params: Record<string, unknown>): string {
   const label = params.seatLabel as string | undefined;
   const role = params.seatRole as string | undefined;
-  if (!label && !role) return "[You are powered by Auggie. Stay in character when responding.]\n\n";
+  if (!label && !role) {
+    return `You are powered by ${provider.displayName}. Stay in character when responding.`;
+  }
   const parts: string[] = [];
   if (label) parts.push(`Your name is "${label}".`);
   if (role) parts.push(`Your role is ${role}.`);
   parts.push("Stay in character when responding.");
-  const rosterCtx = buildWorkerRosterContext(label);
-  return `[${parts.join(" ")}${rosterCtx}]\n\n`;
+  return `${parts.join(" ")}${buildWorkerRosterContext(label)}`;
 }
 
 function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
   const sessionKey = (params.sessionKey as string) ?? "default";
-  const rawMessage = (params.message as string) ?? "";
-  const runId = `auggie_${Date.now()}_${++runCounter}`;
-
-  // Inject personality context from seat config
-  const message = buildPersonalityPrefix(params) + rawMessage;
+  const message = (params.message as string) ?? "";
+  const runId = `${provider.id}_${Date.now()}_${++runCounter}`;
 
   // Immediate response with runId
   sendResponse(state, id, true, { runId, status: "accepted" });
@@ -173,30 +161,26 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   // Lifecycle start
   sendEvent(state, "agent", { runId, sessionKey, stream: "lifecycle", data: { phase: "start" } });
 
-  // Build auggie command args
-  const args = ["--print", "--output-format", "json"];
+  const spec = provider.buildRun({
+    message,
+    personality: buildPersonality(params),
+    sessionId: state.sessionMap.get(sessionKey),
+    // Attach the MCP server for worker dispatch if we have a roster
+    mcpConfigPath: writeMcpConfig(),
+    model: (params.model as string | undefined) ?? process.env.AGENT_TOWN_MODEL,
+    workspaceDir: provider.usesWorkspaces
+      ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey)
+      : undefined,
+  });
 
-  // Attach MCP server for worker dispatch if we have a roster
-  const mcpConfigPath = writeMcpConfig();
-  if (mcpConfigPath) {
-    args.push("--mcp-config", mcpConfigPath);
-  }
-
-  const existingSessionId = state.sessionMap.get(sessionKey);
-  if (existingSessionId) {
-    args.push("--resume", existingSessionId);
-  }
-
-  args.push("--");
-  args.push(message);
-
-  log.info(`Spawning auggie for run ${runId}:`, ["auggie", ...args].join(" "));
+  log.info(`Spawning ${provider.displayName} for run ${runId} in ${spec.cwd ?? process.cwd()}`);
 
   const port = process.env.PORT ?? "3000";
   let child: ChildProcess;
   try {
-    child = spawn("auggie", args, {
+    child = spawn(spec.bin, spec.args, {
       stdio: ["ignore", "pipe", "pipe"],
+      cwd: spec.cwd,
       env: {
         ...process.env,
         AGENT_TOWN_PORT: port,
@@ -205,7 +189,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       },
     });
   } catch (err) {
-    const errMsg = `Failed to spawn auggie: ${(err as Error).message}`;
+    const errMsg = `Failed to spawn ${provider.binName}: ${(err as Error).message}`;
     log.error(errMsg);
     sendEvent(state, "agent", {
       runId,
@@ -231,7 +215,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   });
 
   child.on("error", (err) => {
-    log.error(`auggie process error for run ${runId}:`, err.message);
+    log.error(`${provider.binName} process error for run ${runId}:`, err.message);
     state.runningProcesses.delete(runId);
     sendEvent(state, "agent", {
       runId,
@@ -246,8 +230,8 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
     state.runningProcesses.delete(runId);
 
     if (code === null || code !== 0) {
-      const errMsg = stderr.trim() || `auggie exited with code ${code}`;
-      log.error(`auggie failed for run ${runId}:`, errMsg);
+      const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
+      log.error(`${provider.binName} failed for run ${runId}:`, errMsg);
       sendEvent(state, "agent", {
         runId,
         sessionKey,
@@ -258,31 +242,43 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       return;
     }
 
-    const parsed = parseAuggieOutput(stdout);
+    const parsed = provider.parseResult(stdout);
     if (!parsed) {
-      log.error(`auggie produced unparseable output for run ${runId}:`, stdout.slice(0, 500));
+      log.error(
+        `${provider.binName} produced unparseable output for run ${runId}:`,
+        stdout.slice(0, 500),
+      );
       sendEvent(state, "agent", {
         runId,
         sessionKey,
         stream: "lifecycle",
-        data: { phase: "error", error: "Failed to parse auggie output" },
+        data: { phase: "error", error: `Failed to parse ${provider.displayName} output` },
       });
       sendEvent(state, "chat", { runId, sessionKey, state: "error" });
       return;
     }
 
-    // Store auggie session_id for future resume
-    if (typeof parsed.session_id === "string") {
-      state.sessionMap.set(sessionKey, parsed.session_id);
-      log.debug(`Mapped sessionKey ${sessionKey} → auggie session ${parsed.session_id}`);
+    // Store the CLI session id so the next message to this seat resumes it
+    if (parsed.sessionId) {
+      state.sessionMap.set(sessionKey, parsed.sessionId);
+      log.debug(`Mapped sessionKey ${sessionKey} → ${provider.id} session ${parsed.sessionId}`);
     }
 
-    const responseText =
-      typeof parsed.result === "string"
-        ? parsed.result
-        : typeof parsed.response === "string"
-          ? parsed.response
-          : JSON.stringify(parsed);
+    // A zero exit code with is_error set means the CLI ran but refused the turn
+    // (not logged in, quota, invalid model). Surface it instead of speaking it.
+    if (parsed.isError) {
+      log.error(`${provider.displayName} returned an error for run ${runId}: ${parsed.text}`);
+      sendEvent(state, "agent", {
+        runId,
+        sessionKey,
+        stream: "lifecycle",
+        data: { phase: "error", error: parsed.text },
+      });
+      sendEvent(state, "chat", { runId, sessionKey, state: "error" });
+      return;
+    }
+
+    const responseText = parsed.text;
 
     // Lifecycle end
     sendEvent(state, "agent", {
@@ -326,9 +322,15 @@ function handleChatAbort(state: ClientState, id: string, params: Record<string, 
 // ── Models list handler ────────────────────────────────
 
 async function handleModelsList(state: ClientState, id: string) {
+  const modelsCommand = provider.modelsCommand;
+  if (!modelsCommand) {
+    sendResponse(state, id, true, { models: provider.staticModels });
+    return;
+  }
+
   try {
     const result = await new Promise<string>((resolve, reject) => {
-      const child = spawn("auggie", ["model", "list", "--json"], {
+      const child = spawn(resolveBin(provider), modelsCommand, {
         stdio: ["ignore", "pipe", "pipe"],
       });
       let out = "";
@@ -338,7 +340,7 @@ async function handleModelsList(state: ClientState, id: string) {
       child.on("error", reject);
       child.on("close", (code) => {
         if (code === 0) resolve(out);
-        else reject(new Error(`auggie model list exited with code ${code}`));
+        else reject(new Error(`${provider.binName} model list exited with code ${code}`));
       });
       // Timeout after 10s
       setTimeout(() => {
@@ -347,9 +349,9 @@ async function handleModelsList(state: ClientState, id: string) {
       }, 10_000);
     });
 
-    const parsed = parseAuggieOutput(result);
+    const parsed = parseJsonObject(result);
     if (parsed && Array.isArray(parsed.models)) {
-      sendResponse(state, id, true, { models: parsed.models });
+      sendResponse(state, id, true, { models: parsed.models as ModelChoice[] });
       return;
     }
     // Try treating the whole output as an array
@@ -366,13 +368,11 @@ async function handleModelsList(state: ClientState, id: string) {
       }
     }
   } catch (err) {
-    log.warn("Failed to list auggie models:", (err as Error).message);
+    log.warn(`Failed to list ${provider.binName} models:`, (err as Error).message);
   }
 
   // Static fallback
-  sendResponse(state, id, true, {
-    models: [{ id: "default", provider: "auggie", contextWindow: 128000 }],
-  });
+  sendResponse(state, id, true, { models: provider.staticModels });
 }
 
 // ── Client message router ──────────────────────────────
@@ -510,15 +510,8 @@ export function dispatchToWorker(
       return;
     }
 
-    const runId = `auggie_sub_${Date.now()}_${++runCounter}`;
+    const runId = `${provider.id}_sub_${Date.now()}_${++runCounter}`;
     const sessionKey = `subagent:dispatch:${seatId}:${runId}`;
-
-    // Build personality for the target worker
-    const prefix = buildPersonalityPrefix({
-      seatLabel: seat.label,
-      seatRole: seat.roleTitle,
-    });
-    const message = prefix + task;
 
     // Emit lifecycle start so frontend assigns to the target worker
     sendEvent(state, "agent", {
@@ -528,28 +521,29 @@ export function dispatchToWorker(
       data: { phase: "start", label: `${seat.label}: ${task.slice(0, 40)}`, seatId },
     });
 
-    const args = ["--print", "--output-format", "json"];
-
-    // Resume existing session for this seat if available
+    // Resume this seat's own session if it has run before
     const seatSessionKey = `dispatch:${seatId}`;
-    const existingSessionId = state.sessionMap.get(seatSessionKey);
-    if (existingSessionId) {
-      args.push("--resume", existingSessionId);
-    }
-
-    args.push("--");
-    args.push(message);
+    const spec = provider.buildRun({
+      message: task,
+      personality: buildPersonality({ seatLabel: seat.label, seatRole: seat.roleTitle }),
+      sessionId: state.sessionMap.get(seatSessionKey),
+      // A dispatched worker does not delegate onward, so no MCP config.
+      mcpConfigPath: null,
+      model: process.env.AGENT_TOWN_MODEL,
+      workspaceDir: provider.usesWorkspaces ? ensureSeatWorkspace(seat.label) : undefined,
+    });
 
     log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
 
     let child: ChildProcess;
     try {
-      child = spawn("auggie", args, {
+      child = spawn(spec.bin, spec.args, {
         stdio: ["ignore", "pipe", "pipe"],
+        cwd: spec.cwd,
         env: { ...process.env },
       });
     } catch (err) {
-      const errMsg = `Failed to spawn auggie for dispatch: ${(err as Error).message}`;
+      const errMsg = `Failed to spawn ${provider.binName} for dispatch: ${(err as Error).message}`;
       log.error(errMsg);
       sendEvent(state, "agent", {
         runId,
@@ -584,7 +578,7 @@ export function dispatchToWorker(
 
     child.on("close", (code) => {
       if (code !== 0) {
-        const errMsg = stderr.trim() || `auggie exited with code ${code}`;
+        const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
         log.error(`dispatch failed for run ${runId}:`, errMsg);
         sendEvent(state, "agent", {
           runId,
@@ -596,18 +590,24 @@ export function dispatchToWorker(
         return;
       }
 
-      const parsed = parseAuggieOutput(stdout);
-      const responseText = parsed
-        ? typeof parsed.result === "string"
-          ? parsed.result
-          : typeof parsed.response === "string"
-            ? parsed.response
-            : JSON.stringify(parsed)
-        : stdout.trim();
+      const parsed = provider.parseResult(stdout);
+      const responseText = parsed ? parsed.text : stdout.trim();
 
       // Store session for future resume
-      if (parsed && typeof parsed.session_id === "string") {
-        state.sessionMap.set(seatSessionKey, parsed.session_id);
+      if (parsed?.sessionId) {
+        state.sessionMap.set(seatSessionKey, parsed.sessionId);
+      }
+
+      if (parsed?.isError) {
+        log.error(`Dispatch to ${seat.label} returned an error: ${responseText}`);
+        sendEvent(state, "agent", {
+          runId,
+          sessionKey,
+          stream: "lifecycle",
+          data: { phase: "error", error: responseText },
+        });
+        resolve({ result: "", error: responseText });
+        return;
       }
 
       // Emit lifecycle end + final chat for frontend
@@ -656,11 +656,18 @@ function cleanupClient(state: ClientState) {
 // ── Public API ─────────────────────────────────────────
 
 /**
- * Attach the Auggie bridge WebSocket handler to an HTTP server.
+ * Attach the CLI bridge WebSocket handler to an HTTP server.
  * Intercepts upgrade requests on `path` and handles them with the
- * emulated OpenClaw gateway protocol backed by the `auggie` CLI.
+ * emulated OpenClaw gateway protocol, backed by the given CLI provider.
  */
-export function attachAuggieBridge(server: import("http").Server, path = "/api/gateway") {
+export function attachCliBridge(
+  server: import("http").Server,
+  cliProvider: CliProvider,
+  path = "/api/gateway",
+) {
+  provider = cliProvider;
+  log = createLogger(`${provider.displayName} Bridge`);
+
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -703,5 +710,5 @@ export function attachAuggieBridge(server: import("http").Server, path = "/api/g
 
   process.on("exit", cleanupMcpConfig);
 
-  log.info(`Auggie bridge attached on ${path}`);
+  log.info(`${provider.displayName} bridge attached on ${path} (bin: ${resolveBin(provider)})`);
 }

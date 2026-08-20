@@ -40,7 +40,8 @@ export interface SeatDetailPanelProps {
   onSave: () => void;
   onUnassign: () => void;
   onClose: () => void;
-  isAuggie?: boolean;
+  isCliProvider?: boolean;
+  providerLabel?: string;
 }
 
 export default function SeatDetailPanel({
@@ -63,7 +64,8 @@ export default function SeatDetailPanel({
   onSave,
   onUnassign,
   onClose,
-  isAuggie,
+  isCliProvider,
+  providerLabel,
 }: SeatDetailPanelProps) {
   return (
     <div
@@ -168,7 +170,7 @@ export default function SeatDetailPanel({
                       color: "var(--pixel-muted)",
                     }}
                   >
-                    {isAuggie ? "Auggie" : "No agents found"}
+                    {isCliProvider ? providerLabel : "No agents found"}
                   </div>
                 ) : (
                   <select
@@ -228,8 +230,8 @@ export default function SeatDetailPanel({
         {busy
           ? "This seat is currently active. Finish or stop the task before changing crew assignment."
           : effectiveSeatType === "agent"
-            ? isAuggie
-              ? "Agent seats are not supported with the Auggie provider. Switch to Worker mode to assign tasks."
+            ? isCliProvider
+              ? `Agent seats are not supported with the ${providerLabel} provider. Switch to Worker mode to assign tasks.`
               : "Select an OpenClaw agent, choose a portrait, then save. Agents have their own workspace and session."
             : "Select a portrait, set name and role, then save. Workers execute tasks from the main agent."}
       </div>

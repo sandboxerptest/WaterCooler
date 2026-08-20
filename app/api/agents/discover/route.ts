@@ -6,6 +6,7 @@
  * Returns AgentConfig[] for the frontend to consume.
  */
 
+import { isCliProviderId } from "@/lib/cli-providers";
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -86,8 +87,8 @@ function resolveModel(model: unknown): string | undefined {
 }
 
 export async function GET() {
-  // When using Auggie provider, agent discovery is not applicable
-  if (process.env.AGENT_PROVIDER === "auggie") {
+  // Agent discovery reads OpenClaw config, so it does not apply to CLI providers
+  if (isCliProviderId(process.env.AGENT_PROVIDER ?? "claude")) {
     return NextResponse.json({ agents: [] });
   }
 

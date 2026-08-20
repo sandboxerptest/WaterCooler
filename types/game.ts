@@ -99,7 +99,7 @@ export interface ToolChatMessage extends ChatMessageBase {
 
 export type ChatMessage = TextChatMessage | ToolChatMessage;
 
-export type AgentProvider = "openclaw" | "auggie";
+export type AgentProvider = "openclaw" | "auggie" | "claude";
 
 export interface GatewayConfig {
   url: string;
