@@ -1,44 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { SpeechSession, type SpeechRecognitionLike } from "../speech-session";
 import { createLogger } from "../logger";
 
 const log = createLogger("Speech");
 
-/**
- * Minimal shape of the Web Speech API we rely on. It is not in lib.dom, and
- * only Chrome/Safari ship it (behind the webkit prefix).
- */
-interface SpeechRecognitionAlternative {
-  transcript: string;
-}
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  0: SpeechRecognitionAlternative;
-  length: number;
-}
-interface SpeechRecognitionEventLike extends Event {
-  resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: SpeechRecognitionResult;
-  };
-}
-interface SpeechRecognitionErrorEventLike extends Event {
-  error: string;
-}
-interface SpeechRecognitionLike extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
-  onend: (() => void) | null;
-}
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 function getRecognitionCtor(): SpeechRecognitionCtor | null {
@@ -52,62 +19,72 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
 
 export type SpeechStatus = "unsupported" | "idle" | "listening" | "error";
 
-export interface SpeechInput {
-  status: SpeechStatus;
-  /** Text recognised so far this utterance, including the interim tail. */
-  transcript: string;
-  /** Last error code from the API, e.g. "not-allowed" when the mic is blocked. */
-  error: string | null;
-  supported: boolean;
-  start: () => void;
-  /** Stop listening and hand back everything recognised this utterance. */
-  stop: () => string;
+/** Turn an API error code into something a person can act on. */
+function errorHint(error: string): string {
+  switch (error) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "Mic blocked — allow access";
+    case "no-speech":
+      return "Didn't catch that";
+    case "audio-capture":
+      return "No microphone found";
+    case "network":
+      return "Speech service unreachable";
+    case "aborted":
+      return "Cancelled";
+    default:
+      return error;
+  }
 }
 
-/**
- * Push-to-talk speech recognition.
- *
- * Recognition runs only while held, and the caller decides what to do with the
- * text — here it lands in the chat box for review rather than being sent, so a
- * mis-hearing never becomes an agent run on its own.
- */
+export interface SpeechInput {
+  status: SpeechStatus;
+  /** Text recognised so far this utterance, for a live preview. */
+  transcript: string;
+  /** Last error code, e.g. "not-allowed" when the mic is blocked. */
+  error: string | null;
+  /** A short, human-readable reason the last attempt produced nothing, if any. */
+  hint: string | null;
+  supported: boolean;
+  start: () => void;
+  /**
+   * Ask recognition to stop. The transcript is delivered to the hook's
+   * onResult callback once the engine flushes — not synchronously here.
+   */
+  stop: () => void;
+}
+
 /** Capability is a client-only fact, so it must not be read during SSR. */
 const subscribeToNothing = () => () => {};
 const readSupport = () => getRecognitionCtor() !== null;
 const supportedOnServer = () => false;
 
-export function useSpeechInput(): SpeechInput {
-  // Rendering the server snapshot (false) during hydration keeps the mic
-  // button's markup identical on both sides; the real value lands right after.
+/**
+ * Push-to-talk speech recognition.
+ *
+ * @param onResult receives the finished transcript. Callers put it in their own
+ * field for review — nothing is submitted on the user's behalf, so a
+ * mis-hearing never becomes an agent run.
+ */
+export function useSpeechInput(onResult: (text: string) => void): SpeechInput {
+  // Rendering the server snapshot (false) during hydration keeps the markup
+  // identical on both sides; the real value lands right after.
   const supported = useSyncExternalStore(subscribeToNothing, readSupport, supportedOnServer);
 
   const [rawStatus, setStatus] = useState<SpeechStatus>("idle");
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
 
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const finalRef = useRef("");
-  const interimRef = useRef("");
+  const sessionRef = useRef<SpeechSession | null>(null);
+  // Held in a ref so a re-rendered callback still reaches an in-flight session
+  const onResultRef = useRef(onResult);
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
 
   const status: SpeechStatus = supported ? rawStatus : "unsupported";
-
-  const stop = useCallback((): string => {
-    const recognition = recognitionRef.current;
-    if (recognition) {
-      try {
-        recognition.stop();
-      } catch {
-        /* already stopped */
-      }
-      recognitionRef.current = null;
-    }
-    const text = `${finalRef.current} ${interimRef.current}`.replace(/\s+/g, " ").trim();
-    finalRef.current = "";
-    interimRef.current = "";
-    setTranscript("");
-    setStatus((prev) => (prev === "error" ? prev : "idle"));
-    return text;
-  }, []);
 
   const start = useCallback(() => {
     const Ctor = getRecognitionCtor();
@@ -115,68 +92,57 @@ export function useSpeechInput(): SpeechInput {
       setStatus("unsupported");
       return;
     }
-    if (recognitionRef.current) return;
+    if (sessionRef.current?.listening) return;
 
-    finalRef.current = "";
-    interimRef.current = "";
     setTranscript("");
     setError(null);
+    setHint(null);
 
-    const recognition = new Ctor();
-    recognition.lang = navigator.language || "en-US";
-    // Keep listening through natural pauses; the user decides when to stop.
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    const session = new SpeechSession(
+      () => {
+        const recognition = new Ctor();
+        recognition.lang = navigator.language || "en-US";
+        return recognition;
+      },
+      {
+        onInterim: setTranscript,
+        onResult: (text) => {
+          setTranscript("");
+          onResultRef.current(text);
+        },
+        onNoSpeech: () => {
+          setTranscript("");
+          setHint("Didn't catch that");
+        },
+        onError: (err) => {
+          log.warn("recognition error:", err);
+          setError(err);
+          setHint(errorHint(err));
+          setStatus("error");
+        },
+        onStateChange: (listening) => {
+          setStatus((prev) => {
+            if (listening) return "listening";
+            return prev === "error" ? prev : "idle";
+          });
+        },
+      },
+    );
 
-    recognition.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const text = result[0]?.transcript ?? "";
-        if (result.isFinal) finalRef.current += `${text} `;
-        else interim += text;
-      }
-      interimRef.current = interim;
-      setTranscript(`${finalRef.current}${interim}`.replace(/\s+/g, " ").trim());
-    };
+    sessionRef.current = session;
+    session.start();
+  }, []);
 
-    recognition.onerror = (event) => {
-      log.warn("recognition error:", event.error);
-      setError(event.error);
-      setStatus("error");
-      recognitionRef.current = null;
-    };
-
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setStatus((prev) => (prev === "error" ? prev : "idle"));
-    };
-
-    try {
-      recognition.start();
-      recognitionRef.current = recognition;
-      setStatus("listening");
-    } catch (err) {
-      log.warn("failed to start recognition:", (err as Error).message);
-      setError("start-failed");
-      setStatus("error");
-    }
+  const stop = useCallback(() => {
+    sessionRef.current?.stop();
   }, []);
 
   useEffect(() => {
     return () => {
-      const recognition = recognitionRef.current;
-      if (recognition) {
-        try {
-          recognition.abort();
-        } catch {
-          /* ignore */
-        }
-        recognitionRef.current = null;
-      }
+      sessionRef.current?.abort();
+      sessionRef.current = null;
     };
   }, []);
 
-  return { status, transcript, error, supported, start, stop };
+  return { status, transcript, error, hint, supported, start, stop };
 }

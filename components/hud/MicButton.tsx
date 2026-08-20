@@ -22,7 +22,9 @@ interface MicButtonProps {
  * text, not as an agent run.
  */
 export default function MicButton({ onTranscript, disabled, size = 40, what }: MicButtonProps) {
-  const speech = useSpeechInput();
+  // The transcript arrives asynchronously once the engine flushes, so the hook
+  // hands it back here rather than from stop().
+  const speech = useSpeechInput(onTranscript);
   const listening = speech.status === "listening";
   const unavailable = disabled || !speech.supported;
 
@@ -33,8 +35,7 @@ export default function MicButton({ onTranscript, disabled, size = 40, what }: M
 
   const finish = () => {
     if (!listening) return;
-    const text = speech.stop();
-    if (text) onTranscript(text);
+    speech.stop();
   };
 
   const title = !speech.supported
@@ -49,7 +50,7 @@ export default function MicButton({ onTranscript, disabled, size = 40, what }: M
 
   return (
     <span style={{ position: "relative", display: "inline-flex" }}>
-      {listening && (
+      {(listening || speech.hint) && (
         <span
           style={{
             position: "absolute",
@@ -65,18 +66,19 @@ export default function MicButton({ onTranscript, disabled, size = 40, what }: M
             borderRadius: "var(--pixel-radius-sm)",
             background: "var(--pixel-panel, rgba(0,0,0,0.85))",
             color: "var(--pixel-text, #fff)",
-            border: "1px solid var(--pixel-red)",
+            border: `1px solid ${listening ? "var(--pixel-red)" : "var(--pixel-muted)"}`,
             pointerEvents: "none",
             zIndex: 30,
           }}
         >
-          🎙 {speech.transcript || "Listening…"}
+          {listening ? `🎙 ${speech.transcript || "Listening…"}` : speech.hint}
         </span>
       )}
       <button
         type="button"
         className="pixel-icon-btn"
         style={{
+          position: "relative",
           width: size,
           height: size,
           minWidth: size,
@@ -107,6 +109,22 @@ export default function MicButton({ onTranscript, disabled, size = 40, what }: M
         aria-pressed={listening}
       >
         <Mic size={Math.round(size * 0.4)} />
+        {!speech.supported && (
+          <span
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              fontSize: `${Math.max(10, Math.round(size * 0.5))}px`,
+              color: "var(--pixel-muted)",
+              pointerEvents: "none",
+            }}
+            aria-hidden
+          >
+            ⃠
+          </span>
+        )}
       </button>
     </span>
   );
