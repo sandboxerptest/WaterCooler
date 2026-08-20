@@ -55,6 +55,47 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Agent providers
+
+Agents can be executed three ways, selected with the `AGENT_PROVIDER` env var:
+
+| Provider | Value | What runs the agent |
+| --- | --- | --- |
+| Claude Code (default) | `claude` | Local `claude` CLI, using your Claude subscription |
+| Auggie | `auggie` | Local `auggie` CLI |
+| OpenClaw | `openclaw` | An OpenClaw gateway over WebSocket |
+
+The two CLI providers need no gateway, URL or token: the server emulates the
+gateway protocol in-process and spawns the CLI per run, so the app connects to
+itself on startup. OpenClaw still works exactly as before.
+
+```bash
+pnpm dev                          # Claude Code
+AGENT_PROVIDER=openclaw pnpm dev  # OpenClaw gateway
+```
+
+### Claude Code provider
+
+Each seat runs in its own sandbox directory under `.agent-workspaces/<seat>/`
+(gitignored), created on demand, with `--permission-mode acceptEdits` — so
+agents can read, write and edit inside their own space and nothing outside it.
+Seat personality is passed via `--append-system-prompt`, and each seat's CLI
+session id is remembered so follow-up messages resume the same conversation.
+
+Optional env vars:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CLAUDE_BIN` | resolved from PATH | Path to the `claude` executable |
+| `CLAUDE_PERMISSION_MODE` | `acceptEdits` | Permission mode for spawned agents |
+| `CLAUDE_ALLOWED_TOOLS` | — | Extra tools to allow, comma-separated (e.g. `Bash`) |
+| `AGENT_TOWN_MODEL` | CLI default | Model for spawned agents (`opus`, `sonnet`, `haiku`) |
+
+Note that `--print` runs are non-interactive: a tool that is neither
+auto-approved by the permission mode nor named in `CLAUDE_ALLOWED_TOOLS` is
+denied rather than prompted for. Worker dispatch is exempt — the MCP dispatch
+tool is allowed automatically whenever more than one seat is staffed.
+
 ## Key features
 
 - **In-world task assignment:** Approach any worker and assign tasks through an RPG-style interaction menu. No forms, no dropdowns. You walk up and talk.

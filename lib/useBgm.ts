@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { DEFAULT_BGM_VOLUME } from "@/lib/constants";
 import { loadBgmVolume, saveBgmVolume } from "@/lib/persistence";
 
@@ -27,11 +27,42 @@ export interface BgmState {
   setVolume: (percent: number) => void;
 }
 
+// ── Volume store ───────────────────────────────────────
+// A module-level store keeps the persisted volume out of the render body so it
+// can be read hydration-safely via useSyncExternalStore.
+
+let storedVolume: number | null = null;
+const volumeListeners = new Set<() => void>();
+
+function readStoredVolume(): number {
+  if (storedVolume === null) storedVolume = clampVolume(loadBgmVolume());
+  return storedVolume;
+}
+
+function getServerVolume(): number {
+  return DEFAULT_BGM_VOLUME;
+}
+
+function writeStoredVolume(value: number) {
+  storedVolume = value;
+  saveBgmVolume(value);
+  for (const listener of volumeListeners) listener();
+}
+
+function subscribeVolume(listener: () => void): () => void {
+  volumeListeners.add(listener);
+  return () => {
+    volumeListeners.delete(listener);
+  };
+}
+
 export function useBgm(): BgmState {
-  // Start from the default so the first client render matches the server's.
-  // localStorage is unavailable during SSR, so reading it here would render a
-  // different icon on the client and break hydration.
-  const [volume, setVolume] = useState(DEFAULT_BGM_VOLUME);
+  // The persisted volume lives in localStorage, which does not exist during
+  // SSR. Reading it in the render body would make the client's first paint
+  // disagree with the server's (a muted user gets a different music icon),
+  // which React reports as a hydration mismatch. useSyncExternalStore renders
+  // the server snapshot during hydration and swaps to the stored value after.
+  const volume = useSyncExternalStore(subscribeVolume, readStoredVolume, getServerVolume);
   const volumeRef = useRef(volume);
 
   useEffect(() => {
@@ -39,9 +70,9 @@ export function useBgm(): BgmState {
   }, [volume]);
 
   useEffect(() => {
-    // Adopt the persisted volume once mounted, then start playback with it.
-    const stored = clampVolume(loadBgmVolume());
-    setVolume(stored);
+    // Read the store directly: this runs once, and during hydration `volume`
+    // is still the server snapshot rather than the user's saved setting.
+    const stored = readStoredVolume();
     const audio = getAudio();
     audio.volume = stored;
     if (stored > 0) {
@@ -67,8 +98,7 @@ export function useBgm(): BgmState {
 
   const changeVolume = useCallback((percent: number) => {
     const v = clampVolume(percent / 100);
-    setVolume(v);
-    saveBgmVolume(v);
+    writeStoredVolume(v);
     const audio = getAudio();
     audio.volume = v;
     if (v > 0 && audio.paused) {
