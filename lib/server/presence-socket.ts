@@ -11,11 +11,14 @@ import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
+import { DEFAULT_ROOM, getRoomStore } from "./room-store";
 import { createLogger } from "../logger";
 import {
   HEARTBEAT_MS,
   TICK_MS,
   isClientMessage,
+  isWorldChange,
+  type WorldChange,
   type Facing,
   type ServerMessage,
 } from "../presence-types";
@@ -112,6 +115,51 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   // Never hold the process open for a room nobody is in
   ticker.unref?.();
 
+  /**
+   * Persist one change and pass it on. The sender already applied it locally,
+   * so the echo goes to everyone else — the room converges without the author
+   * seeing their own action arrive twice.
+   */
+  const applyWorldChange = (authorId: string, change: WorldChange) => {
+    const store = getRoomStore();
+    const author = hub.snapshot().find((player) => player.id === authorId);
+
+    switch (change.entity) {
+      case "task": {
+        // Stamp who asked, unless the client already said
+        const task = { ...change.task };
+        if (!task.requestedBy && author) {
+          task.requestedBy = author.id;
+          task.requestedByName = author.name;
+        }
+        store.upsertTask(DEFAULT_ROOM, task);
+        broadcast(
+          {
+            type: "world",
+            change: { entity: "task", task },
+            by: author && { id: author.id, name: author.name },
+          },
+          authorId,
+        );
+        return;
+      }
+      case "message":
+        store.appendMessage(DEFAULT_ROOM, change.message);
+        break;
+      case "seat":
+        store.upsertSeat(DEFAULT_ROOM, change.seat);
+        break;
+      case "session":
+        store.upsertSession(DEFAULT_ROOM, change.session);
+        break;
+    }
+
+    broadcast(
+      { type: "world", change, by: author && { id: author.id, name: author.name } },
+      authorId,
+    );
+  };
+
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (req.url !== path) return;
     if (!checkOrigin(req, socket)) return;
@@ -153,6 +201,14 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             capacity: hub.capacity,
           });
           broadcast({ type: "joined", player: result.player }, id);
+          return;
+        }
+
+        if (parsed.type === "world") {
+          // Only someone in the room may change it
+          if (!hub.has(id)) return;
+          if (!isWorldChange(parsed.change)) return;
+          applyWorldChange(id, parsed.change);
           return;
         }
 

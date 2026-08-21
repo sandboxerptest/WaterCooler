@@ -136,6 +136,10 @@ export function mergeDiscoveredSeats(
 export type Action =
   | { type: "SET_CONNECTION"; status: ConnectionStatus }
   | { type: "ADD_TASK"; task: TaskItem }
+  /** Apply a task from another player: replace by id, or add if it is new. */
+  | { type: "UPSERT_TASK"; task: TaskItem }
+  /** Apply a chat message from another player, without duplicating it. */
+  | { type: "UPSERT_CHAT"; message: ChatMessage }
   | { type: "UPDATE_TASK"; taskId: string; patch: Partial<TaskItem> }
   | { type: "APPEND_CHAT"; message: ChatMessage }
   | { type: "APPEND_DELTA"; runId: string; delta: string; actorName?: string }
@@ -187,6 +191,24 @@ export function reducer(state: StudioSnapshot, action: Action): StudioSnapshot {
 
     case "ADD_TASK":
       return { ...state, tasks: [action.task, ...state.tasks] };
+
+    case "UPSERT_TASK": {
+      // Keeping the incoming object by reference lets the sync layer recognise
+      // it as already-known and avoid echoing it back to the room.
+      const index = state.tasks.findIndex((task) => task.taskId === action.task.taskId);
+      if (index === -1) return { ...state, tasks: [action.task, ...state.tasks] };
+      const tasks = [...state.tasks];
+      tasks[index] = action.task;
+      return { ...state, tasks };
+    }
+
+    case "UPSERT_CHAT": {
+      const index = state.chatMessages.findIndex((message) => message.id === action.message.id);
+      if (index === -1) return { ...state, chatMessages: [...state.chatMessages, action.message] };
+      const chatMessages = [...state.chatMessages];
+      chatMessages[index] = action.message;
+      return { ...state, chatMessages };
+    }
 
     case "UPDATE_TASK":
       return {

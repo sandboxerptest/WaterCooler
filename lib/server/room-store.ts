@@ -272,6 +272,161 @@ export class RoomStore {
     });
   }
 
+  // ── Per-entity writes ─────────────────────────────────
+  // A shared room cannot use whole-slice writes: two people acting at once
+  // would each send a list that omits the other's work, and the later write
+  // would erase it. These apply one change at a time.
+
+  upsertTask(room: string, task: Record<string, unknown>) {
+    this.ensureRoom(room);
+    const id = asString(task.taskId) ?? asString(task.runId);
+    if (!id) return;
+
+    const existing = this.db
+      .prepare("SELECT position FROM tasks WHERE room = ? AND task_id = ?")
+      .get(room, id) as { position: number } | undefined;
+
+    // New tasks go to the head, matching the newest-first list the client keeps
+    const position = existing?.position ?? this.nextHeadPosition(room, "tasks");
+
+    this.db
+      .prepare(
+        `INSERT INTO tasks (room, task_id, seat_id, session_key, status, requested_by, created_at, position, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (room, task_id) DO UPDATE SET
+           seat_id = excluded.seat_id,
+           session_key = excluded.session_key,
+           status = excluded.status,
+           requested_by = COALESCE(excluded.requested_by, tasks.requested_by),
+           data = excluded.data`,
+      )
+      .run(
+        room,
+        id,
+        asString(task.seatId),
+        asString(task.sessionKey),
+        asString(task.status),
+        asString(task.requestedBy),
+        asString(task.createdAt) ?? new Date().toISOString(),
+        position,
+        JSON.stringify(task),
+      );
+
+    this.trim(room, "tasks", LIMITS.tasks, "DESC");
+  }
+
+  appendMessage(room: string, message: Record<string, unknown>) {
+    this.ensureRoom(room);
+    const id = asString(message.id);
+    if (!id) return;
+
+    const existing = this.db
+      .prepare("SELECT position FROM messages WHERE room = ? AND message_id = ?")
+      .get(room, id) as { position: number } | undefined;
+
+    const position = existing?.position ?? this.nextTailPosition(room, "messages");
+
+    this.db
+      .prepare(
+        `INSERT INTO messages (room, message_id, session_key, author_type, author, created_at, position, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (room, message_id) DO UPDATE SET
+           session_key = excluded.session_key,
+           author_type = excluded.author_type,
+           author = excluded.author,
+           data = excluded.data`,
+      )
+      .run(
+        room,
+        id,
+        asString(message.sessionKey),
+        asString(message.role) ?? "system",
+        asString(message.actorName) ?? asString(message.author),
+        asString(message.timestamp) ?? new Date().toISOString(),
+        position,
+        JSON.stringify(message),
+      );
+
+    this.trim(room, "messages", LIMITS.messages, "ASC");
+  }
+
+  upsertSeat(room: string, seat: Record<string, unknown>) {
+    this.ensureRoom(room);
+    const id = asString(seat.seatId);
+    if (!id) return;
+
+    this.db
+      .prepare(
+        `INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)
+         ON CONFLICT (room, seat_id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
+      )
+      .run(room, id, new Date().toISOString(), JSON.stringify(seat));
+  }
+
+  upsertSession(room: string, session: Record<string, unknown>) {
+    this.ensureRoom(room);
+    const key = asString(session.sessionKey) ?? asString(session.key);
+    if (!key) return;
+
+    const existing = this.db
+      .prepare("SELECT position FROM sessions WHERE room = ? AND session_key = ?")
+      .get(room, key) as { position: number } | undefined;
+
+    this.db
+      .prepare(
+        `INSERT INTO sessions (room, session_key, updated_at, position, data) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (room, session_key) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
+      )
+      .run(
+        room,
+        key,
+        new Date().toISOString(),
+        existing?.position ?? this.nextHeadPosition(room, "sessions"),
+        JSON.stringify(session),
+      );
+
+    this.trim(room, "sessions", LIMITS.sessions, "DESC");
+  }
+
+  /** Newest-first collections grow downward from the current minimum. */
+  private nextHeadPosition(room: string, table: "tasks" | "sessions"): number {
+    const row = this.db
+      .prepare(`SELECT MIN(position) AS edge FROM ${table} WHERE room = ?`)
+      .get(room) as { edge: number | null };
+    return (row?.edge ?? 0) - 1;
+  }
+
+  /** Oldest-first collections grow upward from the current maximum. */
+  private nextTailPosition(room: string, table: "messages"): number {
+    const row = this.db
+      .prepare(`SELECT MAX(position) AS edge FROM ${table} WHERE room = ?`)
+      .get(room) as { edge: number | null };
+    return (row?.edge ?? 0) + 1;
+  }
+
+  /**
+   * Keep a collection within its cap, dropping from the end that matters least:
+   * the oldest chat, and the oldest tasks and sessions.
+   */
+  private trim(
+    room: string,
+    table: "tasks" | "messages" | "sessions",
+    limit: number,
+    keep: "ASC" | "DESC",
+  ) {
+    const idColumn =
+      table === "tasks" ? "task_id" : table === "messages" ? "message_id" : "session_key";
+    this.db
+      .prepare(
+        `DELETE FROM ${table} WHERE room = ? AND ${idColumn} IN (
+           SELECT ${idColumn} FROM ${table} WHERE room = ?
+           ORDER BY position ${keep === "ASC" ? "DESC" : "ASC"}
+           LIMIT -1 OFFSET ?
+         )`,
+      )
+      .run(room, room, limit);
+  }
+
   private transaction(fn: () => void) {
     this.db.exec("BEGIN");
     try {

@@ -28,6 +28,8 @@ import { useGateway } from "./hooks/useGateway";
 import { useSession } from "./hooks/useSession";
 import { useTaskRouter } from "./hooks/useTaskRouter";
 import { usePresence } from "./hooks/usePresence";
+import { useWorldSync } from "./hooks/useWorldSync";
+import { primeFromSnapshot, syncMessages, syncSeats, syncSessions, syncTasks } from "./room-sync";
 import { isCliProvider, getDefaultGatewayUrl } from "./utils";
 
 // ── Context ────────────────────────────────────────────
@@ -124,6 +126,13 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   // Keep this browser's character on the room socket
   usePresence();
+  // Apply world changes made by the other people in it
+  useWorldSync({
+    dispatch: dispatchRef,
+    seatConfigs: seatConfigRef,
+    seats: seatsRef,
+    tasks: tasksRef,
+  });
 
   // ── Bootstrap: restore world state from the server + auto-connect ──
   const inflightTaskIdsRef = useRef<string[]>([]);
@@ -145,6 +154,11 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const chat = snapshot.messages;
       const sessions = snapshot.sessions;
       seatConfigRef.current = snapshot.seats;
+
+      // Everything in the snapshot is already in the room; recording it stops
+      // the first diff treating the restored world as brand new and shouting
+      // all of it back at everyone.
+      primeFromSnapshot({ tasks, messages: chat, seats: snapshot.seats, sessions });
 
       // Writes are blocked until this point: the save effects run on mount with
       // empty state, and against a server that would erase the room before its
@@ -269,14 +283,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Persist tasks + chat + sessions to the room ──
+  // ── Share tasks, chat and sessions with the room ──
+  // One change at a time: sending whole collections would let a second player's
+  // write erase work this client had not heard about yet.
   useEffect(() => {
     if (!hydratedRef.current) return;
-    saveRoomPatch({
-      tasks: state.tasks,
-      messages: state.chatMessages,
-      sessions: state.sessions,
-    });
+    syncTasks(state.tasks);
+    syncMessages(state.chatMessages);
+    syncSessions(state.sessions);
   }, [state.tasks, state.chatMessages, state.sessions]);
 
   useEffect(() => {
@@ -291,7 +305,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       agentConfig: seat.agentConfig,
     }));
     seatConfigRef.current = configs;
-    if (hydratedRef.current) saveRoomPatch({ seats: configs });
+    if (hydratedRef.current) syncSeats(configs);
     gameEvents.emit("seat-configs-updated", state.seats);
 
     // Sync worker roster to server for auggie MCP dispatch

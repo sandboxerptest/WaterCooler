@@ -60,7 +60,23 @@ export interface MoveMessage {
   moving: boolean;
 }
 
-export type ClientMessage = JoinMessage | MoveMessage;
+/**
+ * A change to the shared world. One entity at a time: with four people acting
+ * at once, sending whole collections means the later write erases the other
+ * person's work.
+ */
+export type WorldChange =
+  | { entity: "task"; task: Record<string, unknown> }
+  | { entity: "message"; message: Record<string, unknown> }
+  | { entity: "seat"; seat: Record<string, unknown> }
+  | { entity: "session"; session: Record<string, unknown> };
+
+export interface WorldMessage {
+  type: "world";
+  change: WorldChange;
+}
+
+export type ClientMessage = JoinMessage | MoveMessage | WorldMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -93,15 +109,33 @@ export interface PlayerLeftMessage {
   name: string;
 }
 
+export interface WorldBroadcast {
+  type: "world";
+  change: WorldChange;
+  /** Who made the change, so the room can say who asked for what. */
+  by?: { id: string; name: string };
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | RejectedMessage
   | PresenceMessage
   | PlayerJoinedMessage
-  | PlayerLeftMessage;
+  | PlayerLeftMessage
+  | WorldBroadcast;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;
   const type = (value as { type?: unknown }).type;
-  return type === "join" || type === "move";
+  return type === "join" || type === "move" || type === "world";
+}
+
+const WORLD_ENTITIES = ["task", "message", "seat", "session"] as const;
+
+export function isWorldChange(value: unknown): value is WorldChange {
+  if (typeof value !== "object" || value === null) return false;
+  const entity = (value as { entity?: unknown }).entity;
+  if (!WORLD_ENTITIES.includes(entity as (typeof WORLD_ENTITIES)[number])) return false;
+  const payload = (value as Record<string, unknown>)[entity as string];
+  return typeof payload === "object" && payload !== null;
 }
