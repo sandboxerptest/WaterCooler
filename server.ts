@@ -12,6 +12,7 @@ import { attachWsProxy } from "./lib/ws-proxy";
 import { attachCliBridge, dispatchToWorker, validateDispatchSecret } from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
 import { attachPresenceSocket } from "./lib/server/presence-socket";
+import { ERP_DB_PATH, isEmpty, openErpDb, seedErpDatabase } from "./lib/erp/db";
 
 const log = createLogger("Server");
 
@@ -81,9 +82,38 @@ function handleDispatch(req: IncomingMessage, res: ServerResponse) {
 
 // ── Seat config sync for auggie worker roster ──
 
+/**
+ * Build the company on first boot.
+ *
+ * A fresh deployment gets an empty volume, and agents told they have an ERP
+ * would find nothing in it. Seeding here is idempotent — an existing database
+ * is left exactly as it is, including anything agents have since written.
+ */
+function ensureErpData() {
+  try {
+    const db = openErpDb(ERP_DB_PATH);
+    const empty = isEmpty(db);
+    db.close();
+
+    if (!empty) {
+      log.info(`ERP ready at ${ERP_DB_PATH}`);
+      return;
+    }
+
+    log.info("No company data found — creating Brightwater Supply Co.");
+    const { db: seeded, counts } = seedErpDatabase(ERP_DB_PATH);
+    seeded.close();
+    log.info(`ERP seeded: ${counts.customers} customers, ${counts.invoices} invoices`);
+  } catch (err) {
+    // The office still works without it; agents will say the data is unreachable
+    log.error("Could not prepare the ERP:", (err as Error).message);
+  }
+}
+
 app
   .prepare()
   .then(() => {
+    ensureErpData();
     const server = createServer((req, res) => {
       // Intercept internal API routes before Next.js
       if (CLI_PROVIDER) {

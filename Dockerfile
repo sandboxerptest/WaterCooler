@@ -52,6 +52,8 @@ COPY --from=build /app/types ./types
 # wiped on each deploy, and the office resets
 ENV ROOM_DB_PATH=/data/watercooler.sqlite
 ENV AGENT_WORKSPACE_ROOT=/data/agent-workspaces
+# The company's data lives on the volume too, and is seeded on first boot
+ENV ERP_DB_PATH=/data/erp.sqlite
 ENV AGENT_PROVIDER=claude-api
 
 EXPOSE 3000
