@@ -27,6 +27,7 @@ import {
 import { useGateway } from "./hooks/useGateway";
 import { useSession } from "./hooks/useSession";
 import { useTaskRouter } from "./hooks/useTaskRouter";
+import { usePresence } from "./hooks/usePresence";
 import { isCliProvider, getDefaultGatewayUrl } from "./utils";
 
 // ── Context ────────────────────────────────────────────
@@ -120,6 +121,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     runActors: gateway.runActorRef,
     nextTaskId: () => `aw_task_${++taskCounterRef.current}_${Date.now()}`,
   });
+
+  // Keep this browser's character on the room socket
+  usePresence();
 
   // ── Bootstrap: restore world state from the server + auto-connect ──
   const inflightTaskIdsRef = useRef<string[]>([]);

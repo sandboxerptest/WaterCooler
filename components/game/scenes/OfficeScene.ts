@@ -26,6 +26,7 @@ import { CameraController } from "../systems/CameraController";
 import { WorkerManager } from "../systems/WorkerManager";
 import { InteractionManager } from "../systems/InteractionManager";
 import { GamepadInput } from "../systems/GamepadInput";
+import { RemotePlayerManager } from "../systems/RemotePlayerManager";
 import { DoorManager } from "../systems/DoorManager";
 import { initSceneEventBridge } from "../systems/SceneEventBridge";
 
@@ -44,6 +45,8 @@ export class OfficeScene extends Phaser.Scene {
   private promptText: Phaser.GameObjects.Text | null = null;
   private eKey!: Phaser.Input.Keyboard.Key;
   private gamepad!: GamepadInput;
+  private remotePlayers!: RemotePlayerManager;
+  private cleanupPresence: (() => void) | null = null;
   private terminalOpen = false;
 
   /** sessionKey -> seatId: when a character executes a task, that session binds to the character */
@@ -185,6 +188,18 @@ export class OfficeScene extends Phaser.Scene {
 
     resetWanderClock();
     this.gamepad = new GamepadInput(this);
+    this.remotePlayers = new RemotePlayerManager(this);
+
+    const unsubPresence = gameEvents.on("presence-updated", (players) => {
+      this.remotePlayers.sync(players);
+    });
+    const unsubLeft = gameEvents.on("presence-left", (id) => {
+      this.remotePlayers.remove(id);
+    });
+    this.cleanupPresence = () => {
+      unsubPresence();
+      unsubLeft();
+    };
     this.initBossSeat(bossSpawn);
 
     this.cleanupEventBridge = initSceneEventBridge(
@@ -231,14 +246,22 @@ export class OfficeScene extends Phaser.Scene {
     this.cleanupEventBridge?.();
     this.cleanupEventBridge = null;
 
+    this.cleanupPresence?.();
+    this.cleanupPresence = null;
+    this.remotePlayers?.destroyAll();
+
     this.workerManager?.destroyAll();
     this.interactionManager?.destroy();
   }
 
   // ── Update ─────────────────────────────────────────────
 
-  update() {
+  update(_time: number, delta: number) {
     this.gamepad.poll();
+
+    // Remote characters keep easing toward their last reported position even
+    // while this player is in a menu or typing.
+    this.remotePlayers.update(delta);
 
     if (this.interactionManager.interactionMenu.visible) {
       this.interactionManager.interactionMenu.update(this.gamepad);
@@ -259,6 +282,13 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     this.player.update(this.gamepad.velocity(MOVE_SPEED));
+
+    gameEvents.emit("player-moved", {
+      x: this.player.sprite.x,
+      y: this.player.sprite.y,
+      facing: this.player.direction,
+      moving: this.player.isMoving(),
+    });
     if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
       this.cameraController.resumeCameraFollow();
     }

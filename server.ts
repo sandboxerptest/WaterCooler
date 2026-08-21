@@ -16,6 +16,7 @@ import {
   setWorkerRoster,
 } from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
+import { attachPresenceSocket } from "./lib/server/presence-socket";
 
 const log = createLogger("Server");
 
@@ -135,6 +136,10 @@ app
       }
       handle(req, res);
     });
+
+    // Players and agents ride separate sockets: presence is lossy and constant,
+    // agent traffic is rare and must not be dropped.
+    attachPresenceSocket(server);
 
     if (CLI_PROVIDER) {
       attachCliBridge(server, CLI_PROVIDER);

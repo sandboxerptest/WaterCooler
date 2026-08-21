@@ -9,7 +9,13 @@
 
 import type { GatewayConfig, SeatType, AgentConfig } from "@/types/game";
 import { createLogger } from "./logger";
-import { LS_CONFIG, LS_BGM_VOLUME, LS_ONBOARDING_DONE, DEFAULT_BGM_VOLUME } from "./constants";
+import {
+  LS_CONFIG,
+  LS_BGM_VOLUME,
+  LS_PLAYER_NAME,
+  LS_ONBOARDING_DONE,
+  DEFAULT_BGM_VOLUME,
+} from "./constants";
 
 const log = createLogger("Persistence");
 
@@ -52,6 +58,14 @@ export function loadGatewayConfig(): GatewayConfig | null {
 
 export function saveGatewayConfig(config: GatewayConfig) {
   lsSet(LS_CONFIG, config);
+}
+
+export function loadPlayerName(): string {
+  return lsGet<string>(LS_PLAYER_NAME, "Guest");
+}
+
+export function savePlayerName(name: string) {
+  lsSet(LS_PLAYER_NAME, name);
 }
 
 export function loadBgmVolume(): number {

@@ -59,6 +59,7 @@ export const STATUS_LABELS: Record<ConnectionStatus, string> = {
 // ── Persistence keys ─────────────────────────────────────
 export const LS_CONFIG = "agent-town:gateway-config";
 export const LS_BGM_VOLUME = "agent-town:bgm-volume";
+export const LS_PLAYER_NAME = "agent-town:player-name";
 export const LS_ONBOARDING_DONE = "agent-town:onboarding-done";
 
 // ── Audio ────────────────────────────────────────────────

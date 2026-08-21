@@ -1,5 +1,6 @@
 import type { SeatState } from "@/types/game";
 import type { SeatDef } from "@/components/game/utils/MapHelpers";
+import type { PresencePlayer } from "./presence-types";
 import { createLogger } from "./logger";
 
 const log = createLogger("GameEventBus");
@@ -16,6 +17,14 @@ export interface GameEventMap {
   /** Gamepad shoulder buttons cycle HUD panels; Back closes the open one. */
   "hud-cycle-panel": [direction: -1 | 1];
   "hud-close-panel": [];
+  /** Where this browser's own character is, for the room socket to send on. */
+  "player-moved": [position: { x: number; y: number; facing: string; moving: boolean }];
+  /** Everyone else in the room, as the server last reported them. */
+  "presence-updated": [players: PresencePlayer[]];
+  /** A remote player disconnected and should be removed immediately. */
+  "presence-left": [id: string];
+  /** How many humans are in the room, for the HUD. */
+  "presence-count": [count: number, capacity: number];
   "task-aborted": [runId: string];
   "task-completed": [runId: string];
   "task-failed": [runId: string];

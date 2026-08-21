@@ -77,6 +77,11 @@ export class Player {
     }
   }
 
+  /** Current facing, for reporting this character's pose to other players. */
+  get direction(): Direction {
+    return this.facing;
+  }
+
   isMoving(): boolean {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     return body.velocity.x !== 0 || body.velocity.y !== 0;

@@ -1,6 +1,8 @@
 "use client";
 
-import { Sparkles, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sparkles, User, Users } from "lucide-react";
+import { gameEvents } from "@/lib/events";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
 import ContextMeter from "./ContextMeter";
@@ -12,6 +14,15 @@ interface BottomBarProps {
 }
 
 export default function BottomBar({ connection, sessionMetrics, seats }: BottomBarProps) {
+  // Humans in the room, which is separate from the agent seats beside it
+  const [humans, setHumans] = useState<{ count: number; capacity: number } | null>(null);
+
+  useEffect(() => {
+    return gameEvents.on("presence-count", (count, capacity) => {
+      setHumans({ count, capacity });
+    });
+  }, []);
+
   const totalSeats = seats.length;
   const assignedSeats = seats.filter((s) => s.assigned).length;
   const workingCount = seats.filter(
@@ -46,6 +57,17 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
           {assignedSeats}/{totalSeats} seat
         </span>
       </div>
+      {humans && (
+        <div
+          className="hud-pill hud-pill--metric"
+          title={`${humans.count} of ${humans.capacity} humans in this room`}
+        >
+          <User size={10} />
+          <span>
+            {humans.count}/{humans.capacity} here
+          </span>
+        </div>
+      )}
       <div className="hud-pill hud-pill--metric">
         <Sparkles size={10} />
         <span>
