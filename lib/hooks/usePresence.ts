@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { gameEvents } from "../events";
 import { acquireRoomSocket, onRoomMessage, onRoomOpen, sendRoom } from "../room-socket";
+import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
 import { MOVE_SEND_MS, type Facing, type PresencePlayer } from "../presence-types";
@@ -41,6 +42,7 @@ export function usePresence() {
       const spawn = latestRef.current;
       sendRoom({
         type: "join",
+        room: currentRoom(),
         name: loadPlayerName(),
         spriteKey: "player",
         x: spawn?.x ?? 0,

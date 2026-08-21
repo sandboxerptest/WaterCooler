@@ -15,7 +15,19 @@ import { createLogger } from "./logger";
 
 const log = createLogger("Room");
 
+import { DEFAULT_ROOM_SLUG, roomFromLocation } from "./rooms";
+
 const ENDPOINT = "/api/room/state";
+
+/** The room this browser is in, from the URL. */
+export function currentRoom(): string {
+  if (typeof window === "undefined") return DEFAULT_ROOM_SLUG;
+  return roomFromLocation(window.location);
+}
+
+function endpointForRoom(): string {
+  return `${ENDPOINT}?room=${encodeURIComponent(currentRoom())}`;
+}
 
 /** Long enough to batch a burst of reducer updates, short enough to survive a refresh. */
 export const WRITE_DEBOUNCE_MS = 400;
@@ -57,7 +69,7 @@ const EMPTY: RoomSnapshot = {
  */
 export async function fetchRoomSnapshot(mainSessionKey: string): Promise<RoomSnapshot> {
   try {
-    const response = await fetch(ENDPOINT, { cache: "no-store" });
+    const response = await fetch(endpointForRoom(), { cache: "no-store" });
     if (!response.ok) {
       log.warn(`snapshot request failed: ${response.status}`);
       return EMPTY;
@@ -100,7 +112,7 @@ async function flush(): Promise<void> {
   if (Object.keys(body).length === 0) return;
 
   try {
-    const response = await fetch(ENDPOINT, {
+    const response = await fetch(endpointForRoom(), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

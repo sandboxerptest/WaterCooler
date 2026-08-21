@@ -16,7 +16,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
-import { DEFAULT_ROOM, ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
+import { ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
+import { DEFAULT_ROOM_SLUG, normaliseRoomSlug } from "./rooms";
 import {
   ensureSeatWorkspace,
   getCliProvider,
@@ -52,9 +53,9 @@ const clients = new Set<ClientState>();
  * whose scene had not populated seats yet would publish an empty roster,
  * silently stripping the main agent's ability to delegate.
  */
-function getWorkerRoster(): WorkerInfo[] {
+function getWorkerRoster(room: string): WorkerInfo[] {
   try {
-    const seats = getRoomStore().getSnapshot(DEFAULT_ROOM).seats as Array<{
+    const seats = getRoomStore().getSnapshot(room).seats as Array<{
       seatId?: string;
       label?: string;
       roleTitle?: string;
@@ -87,6 +88,8 @@ interface GatewayFrame {
 
 interface ClientState {
   ws: WebSocket;
+  /** Which room this UI is looking at; set at connect, used for every run. */
+  room: string;
   seq: number;
   runningProcesses: Map<string, ChildProcess>;
   /** Maps OpenClaw sessionKey → CLI session id for resume support */
@@ -159,7 +162,7 @@ function atCapacity(): boolean {
 }
 
 /** Reason this provider cannot run right now, or null when it is ready. */
-function providerBlocked(): string | null {
+function providerBlocked(room: string): string | null {
   const reason = provider.preflight?.() ?? null;
   if (reason) return reason;
 
@@ -168,7 +171,7 @@ function providerBlocked(): string | null {
   }
 
   try {
-    if (getRoomStore().isOverBudget(DEFAULT_ROOM)) {
+    if (getRoomStore().isOverBudget(room)) {
       return `This room has reached its $${ROOM_SPEND_LIMIT_USD} spend limit. Agents are paused.`;
     }
   } catch (err) {
@@ -179,11 +182,13 @@ function providerBlocked(): string | null {
 }
 
 /** Tell every watcher where the room stands against its limit. */
-function broadcastBudget() {
+function broadcastBudget(room: string) {
   try {
     const store = getRoomStore();
-    const spentUsd = store.getSpend(DEFAULT_ROOM);
+    const spentUsd = store.getSpend(room);
     for (const client of clients) {
+      // Only the people looking at this room care what it has spent
+      if (client.room !== room) continue;
       if (client.ws.readyState !== WebSocket.OPEN) continue;
       sendFrame(client, {
         type: "event",
@@ -202,11 +207,11 @@ function broadcastBudget() {
 }
 
 /** Bank what a run cost so a spend ceiling has something to enforce against. */
-function recordSpend(parsed: { costUsd?: number } | null) {
+function recordSpend(room: string, parsed: { costUsd?: number } | null) {
   if (!parsed?.costUsd) return;
   try {
-    getRoomStore().addSpend(DEFAULT_ROOM, parsed.costUsd);
-    broadcastBudget();
+    getRoomStore().addSpend(room, parsed.costUsd);
+    broadcastBudget(room);
   } catch (err) {
     log.warn("could not record spend:", (err as Error).message);
   }
@@ -253,8 +258,8 @@ function checkOrigin(req: IncomingMessage, socket: Duplex): boolean {
 
 // ── Chat send handler ──────────────────────────────────
 
-function buildWorkerRosterContext(currentSeatLabel?: string): string {
-  const workerRoster = getWorkerRoster();
+function buildWorkerRosterContext(room: string, currentSeatLabel?: string): string {
+  const workerRoster = getWorkerRoster(room);
   if (workerRoster.length <= 1) return "";
   const others = workerRoster.filter((w) => w.label !== currentSeatLabel);
   if (others.length === 0) return "";
@@ -272,7 +277,7 @@ function buildWorkerRosterContext(currentSeatLabel?: string): string {
  * Build the seat's persona as plain text. Providers decide where it goes —
  * a system-prompt flag where one exists, otherwise prefixed to the message.
  */
-function buildPersonality(params: Record<string, unknown>): string {
+function buildPersonality(room: string, params: Record<string, unknown>): string {
   const label = params.seatLabel as string | undefined;
   const role = params.seatRole as string | undefined;
   if (!label && !role) {
@@ -282,7 +287,7 @@ function buildPersonality(params: Record<string, unknown>): string {
   if (label) parts.push(`Your name is "${label}".`);
   if (role) parts.push(`Your role is ${role}.`);
   parts.push("Stay in character when responding.");
-  return `${parts.join(" ")}${buildWorkerRosterContext(label)}`;
+  return `${parts.join(" ")}${buildWorkerRosterContext(room, label)}`;
 }
 
 function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
@@ -295,7 +300,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
 
   // A missing key, a full queue or an exhausted budget should read as a plain
   // sentence in the worker's bubble, not as a mysterious non-zero exit code.
-  const blocked = providerBlocked();
+  const blocked = providerBlocked(state.room);
   if (blocked) {
     log.warn(`refusing run ${runId}: ${blocked}`);
     sendEvent(state, "agent", {
@@ -313,13 +318,13 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
 
   const spec = provider.buildRun({
     message,
-    personality: buildPersonality(params),
+    personality: buildPersonality(state.room, params),
     sessionId: state.sessionMap.get(sessionKey),
     // Attach the MCP server for worker dispatch if we have a roster
-    mcpConfigPath: writeMcpConfig(),
+    mcpConfigPath: writeMcpConfig(state.room),
     model: (params.model as string | undefined) ?? process.env.AGENT_TOWN_MODEL,
     workspaceDir: provider.usesWorkspaces
-      ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey, DEFAULT_ROOM)
+      ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey, state.room)
       : undefined,
   });
 
@@ -334,7 +339,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       env: {
         ...process.env,
         AGENT_TOWN_PORT: port,
-        AGENT_TOWN_WORKERS: JSON.stringify(getWorkerRoster()),
+        AGENT_TOWN_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
         AGENT_TOWN_DISPATCH_SECRET: dispatchSecret,
       },
     });
@@ -429,7 +434,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       return;
     }
 
-    recordSpend(parsed);
+    recordSpend(state.room, parsed);
 
     // Store the CLI session id so the next message to this seat resumes it
     if (parsed.sessionId) {
@@ -624,9 +629,9 @@ function getMcpServerPath(): string {
 }
 
 /** Write (or reuse) a temporary MCP config file pointing at our stdio server. */
-function writeMcpConfig(): string | null {
+function writeMcpConfig(room: string): string | null {
   // Delegation only makes sense with someone to delegate to
-  if (getWorkerRoster().length <= 1) return null;
+  if (getWorkerRoster(room).length <= 1) return null;
   if (mcpConfigPath) return mcpConfigPath;
   try {
     const config = {
@@ -671,9 +676,10 @@ function cleanupMcpConfig() {
 export function dispatchToWorker(
   seatId: string,
   task: string,
+  room: string = DEFAULT_ROOM_SLUG,
 ): Promise<{ result: string; error?: string }> {
   return new Promise((resolve) => {
-    const seat = getWorkerRoster().find((w) => w.seatId === seatId);
+    const seat = getWorkerRoster(room).find((w) => w.seatId === seatId);
     if (!seat) {
       resolve({ result: "", error: `Unknown seatId: ${seatId}` });
       return;
@@ -681,7 +687,7 @@ export function dispatchToWorker(
 
     // Delegation respects the same key, capacity and budget rules; otherwise a
     // single agent could fan out past every limit by dispatching.
-    const blocked = providerBlocked();
+    const blocked = providerBlocked(room);
     if (blocked) {
       log.warn(`refusing dispatch to ${seat.label}: ${blocked}`);
       resolve({ result: "", error: blocked });
@@ -703,14 +709,12 @@ export function dispatchToWorker(
     const seatSessionKey = `dispatch:${seatId}`;
     const spec = provider.buildRun({
       message: task,
-      personality: buildPersonality({ seatLabel: seat.label, seatRole: seat.roleTitle }),
+      personality: buildPersonality(room, { seatLabel: seat.label, seatRole: seat.roleTitle }),
       sessionId: dispatchSessions.get(seatSessionKey),
       // A dispatched worker does not delegate onward, so no MCP config.
       mcpConfigPath: null,
       model: process.env.AGENT_TOWN_MODEL,
-      workspaceDir: provider.usesWorkspaces
-        ? ensureSeatWorkspace(seat.label, DEFAULT_ROOM)
-        : undefined,
+      workspaceDir: provider.usesWorkspaces ? ensureSeatWorkspace(seat.label, room) : undefined,
     });
 
     log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
@@ -795,7 +799,7 @@ export function dispatchToWorker(
       }
 
       const parsed = provider.parseResult(stdout);
-      recordSpend(parsed);
+      recordSpend(room, parsed);
       const responseText = parsed ? parsed.text : stdout.trim();
 
       // Store session for future resume
@@ -841,8 +845,8 @@ export function validateDispatchSecret(secret: string): boolean {
 }
 
 /** How many workers the room currently has, for logging and tests. */
-export function workerCount(): number {
-  return getWorkerRoster().length;
+export function workerCount(room: string = DEFAULT_ROOM_SLUG): number {
+  return getWorkerRoster(room).length;
 }
 
 // ── Cleanup ────────────────────────────────────────────
@@ -874,12 +878,17 @@ export function attachCliBridge(
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-    if (req.url !== path) return;
+    // The room rides as a query parameter, so compare the path only
+    const requestPath = (req.url ?? "").split("?")[0];
+    if (requestPath !== path) return;
     if (!checkOrigin(req, socket)) return;
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       const state: ClientState = {
         ws,
+        room: normaliseRoomSlug(
+          new URL(req.url ?? "", "http://localhost").searchParams.get("room"),
+        ),
         seq: 0,
         runningProcesses: new Map(),
         sessionMap: new Map(),

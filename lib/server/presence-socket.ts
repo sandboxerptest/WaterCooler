@@ -1,9 +1,12 @@
 /**
- * Room socket — carries who is where.
+ * Room socket — carries who is where, what they say, and what they change.
  *
- * Runs alongside the agent bridge on its own path. Traffic here is lossy by
- * design: a dropped position frame is corrected 50ms later, so nothing is
- * queued or retried.
+ * Traffic here is deliberately mixed: presence is constant and lossy, speech
+ * and world changes are rare and must not be dropped. They share a connection
+ * because they concern the same room.
+ *
+ * Rooms are separate worlds. Presence, speech and world changes are keyed by
+ * room and never cross between them.
  */
 
 import { randomUUID } from "crypto";
@@ -11,19 +14,19 @@ import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
-import { DEFAULT_ROOM, getRoomStore } from "./room-store";
+import { getRoomStore } from "./room-store";
+import { normaliseRoomSlug } from "../rooms";
 import { createLogger } from "../logger";
-import { randomUUID as messageId } from "crypto";
 import {
   EARSHOT_PX,
   HEARTBEAT_MS,
   TICK_MS,
   isClientMessage,
   isWorldChange,
-  type SayScope,
-  type WorldChange,
   type Facing,
+  type SayScope,
   type ServerMessage,
+  type WorldChange,
 } from "../presence-types";
 
 const log = createLogger("Presence");
@@ -58,10 +61,27 @@ function checkOrigin(req: IncomingMessage, socket: Duplex): boolean {
   return true;
 }
 
+interface Room {
+  hub: PresenceHub;
+  sockets: Map<string, WebSocket>;
+}
+
 export function attachPresenceSocket(server: import("http").Server, path = "/api/room/socket") {
   const wss = new WebSocketServer({ noServer: true });
-  const hub = new PresenceHub();
-  const sockets = new Map<string, WebSocket>();
+
+  const rooms = new Map<string, Room>();
+  /** Which room each connection is in, so later messages can be routed. */
+  const roomOf = new Map<string, string>();
+
+  const roomFor = (slug: string): Room => {
+    let room = rooms.get(slug);
+    if (!room) {
+      room = { hub: new PresenceHub(), sockets: new Map() };
+      rooms.set(slug, room);
+      log.info(`opened room "${slug}"`);
+    }
+    return room;
+  };
 
   const send = (socket: WebSocket, message: ServerMessage) => {
     if (socket.readyState !== WebSocket.OPEN) return;
@@ -72,60 +92,46 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     }
   };
 
-  const broadcast = (message: ServerMessage, exceptId?: string) => {
-    for (const [id, socket] of sockets) {
+  const broadcast = (slug: string, message: ServerMessage, exceptId?: string) => {
+    const room = rooms.get(slug);
+    if (!room) return;
+    for (const [id, socket] of room.sockets) {
       if (id === exceptId) continue;
       send(socket, message);
     }
   };
 
   const drop = (id: string) => {
-    const player = hub.leave(id);
-    sockets.delete(id);
+    const slug = roomOf.get(id);
+    roomOf.delete(id);
+    if (!slug) return;
+
+    const room = rooms.get(slug);
+    if (!room) return;
+
+    const player = room.hub.leave(id);
+    room.sockets.delete(id);
     if (player) {
-      log.info(`${player.name} left (${hub.count}/${hub.capacity})`);
-      broadcast({ type: "left", id, name: player.name });
+      log.info(`${player.name} left "${slug}" (${room.hub.count}/${room.hub.capacity})`);
+      broadcast(slug, { type: "left", id, name: player.name });
     }
+
+    // An empty room costs nothing to forget; its contents live in the store
+    if (room.sockets.size === 0 && room.hub.count === 0) rooms.delete(slug);
   };
 
-  // Standing still is not the same as being gone: a player who never moves
-  // still holds a live socket. Ping them and count the reply as presence, so
-  // only a genuinely dead connection is swept.
-  const heartbeat = setInterval(() => {
-    for (const [id, socket] of sockets) {
-      if (socket.readyState !== WebSocket.OPEN) continue;
-      try {
-        socket.ping();
-      } catch {
-        drop(id);
-      }
-    }
-  }, HEARTBEAT_MS);
-  heartbeat.unref?.();
-
-  // One timer for the whole room rather than one per player
-  const ticker = setInterval(() => {
-    for (const gone of hub.sweep()) {
-      log.info(`${gone.name} timed out`);
-      sockets.get(gone.id)?.close();
-      sockets.delete(gone.id);
-      broadcast({ type: "left", id: gone.id, name: gone.name });
-    }
-
-    if (hub.count === 0) return;
-    broadcast({ type: "presence", players: hub.snapshot() });
-  }, TICK_MS);
-  // Never hold the process open for a room nobody is in
-  ticker.unref?.();
-
   /**
-   * Persist one change and pass it on. The sender already applied it locally,
+   * Persist one change and pass it on. The author already applied it locally,
    * so the echo goes to everyone else — the room converges without the author
    * seeing their own action arrive twice.
    */
-  const applyWorldChange = (authorId: string, change: WorldChange) => {
+  const applyWorldChange = (slug: string, authorId: string, change: WorldChange) => {
+    const room = rooms.get(slug);
+    if (!room) return;
+
     const store = getRoomStore();
-    const author = hub.snapshot().find((player) => player.id === authorId);
+    const author = room.hub.snapshot().find((player) => player.id === authorId);
+    const by = author && { id: author.id, name: author.name };
 
     switch (change.entity) {
       case "task": {
@@ -135,32 +141,22 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           task.requestedBy = author.id;
           task.requestedByName = author.name;
         }
-        store.upsertTask(DEFAULT_ROOM, task);
-        broadcast(
-          {
-            type: "world",
-            change: { entity: "task", task },
-            by: author && { id: author.id, name: author.name },
-          },
-          authorId,
-        );
+        store.upsertTask(slug, task);
+        broadcast(slug, { type: "world", change: { entity: "task", task }, by }, authorId);
         return;
       }
       case "message":
-        store.appendMessage(DEFAULT_ROOM, change.message);
+        store.appendMessage(slug, change.message);
         break;
       case "seat":
-        store.upsertSeat(DEFAULT_ROOM, change.seat);
+        store.upsertSeat(slug, change.seat);
         break;
       case "session":
-        store.upsertSession(DEFAULT_ROOM, change.session);
+        store.upsertSession(slug, change.session);
         break;
     }
 
-    broadcast(
-      { type: "world", change, by: author && { id: author.id, name: author.name } },
-      authorId,
-    );
+    broadcast(slug, { type: "world", change, by }, authorId);
   };
 
   /**
@@ -171,14 +167,17 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * whoever is within earshot, which is the point of having an office rather
    * than a chat window.
    */
-  const relaySpeech = (authorId: string, text: string, scope: SayScope) => {
-    const roster = hub.snapshot();
+  const relaySpeech = (slug: string, authorId: string, text: string, scope: SayScope) => {
+    const room = rooms.get(slug);
+    if (!room) return;
+
+    const roster = room.hub.snapshot();
     const author = roster.find((player) => player.id === authorId);
     if (!author) return;
 
     const said = {
       type: "said" as const,
-      id: messageId(),
+      id: randomUUID(),
       from: { id: author.id, name: author.name },
       text,
       at: new Date().toISOString(),
@@ -186,30 +185,64 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     };
 
     try {
-      getRoomStore().appendMessage(DEFAULT_ROOM, {
+      const store = getRoomStore();
+      store.appendMessage(slug, {
         id: said.id,
         runId: "",
         role: "player",
         content: text,
         actorName: author.name,
         timestamp: said.at,
-        sessionKey: getRoomStore().getSnapshot(DEFAULT_ROOM).activeSessionKey ?? "main",
+        sessionKey: store.getSnapshot(slug).activeSessionKey ?? "main",
       });
     } catch (err) {
       log.warn("could not keep what was said:", (err as Error).message);
     }
 
-    for (const [id, socket] of sockets) {
+    for (const [id, socket] of room.sockets) {
       if (id === authorId) continue;
       if (scope === "nearby") {
         const listener = roster.find((player) => player.id === id);
         if (!listener) continue;
-        const distance = Math.hypot(listener.x - author.x, listener.y - author.y);
-        if (distance > EARSHOT_PX) continue;
+        if (Math.hypot(listener.x - author.x, listener.y - author.y) > EARSHOT_PX) continue;
       }
       send(socket, said);
     }
   };
+
+  // Standing still is not the same as being gone: a player who never moves
+  // still holds a live socket. Ping them and count the reply as presence, so
+  // only a genuinely dead connection is swept.
+  const heartbeat = setInterval(() => {
+    for (const room of rooms.values()) {
+      for (const [id, socket] of room.sockets) {
+        if (socket.readyState !== WebSocket.OPEN) continue;
+        try {
+          socket.ping();
+        } catch {
+          drop(id);
+        }
+      }
+    }
+  }, HEARTBEAT_MS);
+  heartbeat.unref?.();
+
+  // One timer for every room rather than one per player
+  const ticker = setInterval(() => {
+    for (const [slug, room] of rooms) {
+      for (const gone of room.hub.sweep()) {
+        log.info(`${gone.name} timed out of "${slug}"`);
+        room.sockets.get(gone.id)?.close();
+        room.sockets.delete(gone.id);
+        roomOf.delete(gone.id);
+        broadcast(slug, { type: "left", id: gone.id, name: gone.name });
+      }
+
+      if (room.hub.count === 0) continue;
+      broadcast(slug, { type: "presence", players: room.hub.snapshot() });
+    }
+  }, TICK_MS);
+  ticker.unref?.();
 
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (req.url !== path) return;
@@ -228,7 +261,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (!isClientMessage(parsed)) return;
 
         if (parsed.type === "join") {
-          const result = hub.join(id, {
+          const slug = normaliseRoomSlug(parsed.room);
+          const room = roomFor(slug);
+
+          const result = room.hub.join(id, {
             name: typeof parsed.name === "string" ? parsed.name : "Guest",
             spriteKey: typeof parsed.spriteKey === "string" ? parsed.spriteKey : "player",
             x: coerceNumber(parsed.x),
@@ -237,42 +273,49 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           });
 
           if (!result.ok) {
-            log.info(`refused a join: room full (${hub.capacity} humans)`);
+            log.info(`refused a join to "${slug}": full (${room.hub.capacity} humans)`);
             send(ws, { type: "rejected", reason: "full", capacity: result.capacity });
             ws.close();
             return;
           }
 
-          sockets.set(id, ws);
-          log.info(`${result.player.name} joined (${hub.count}/${hub.capacity})`);
+          room.sockets.set(id, ws);
+          roomOf.set(id, slug);
+          log.info(
+            `${result.player.name} joined "${slug}" (${room.hub.count}/${room.hub.capacity})`,
+          );
+
           send(ws, {
             type: "welcome",
             you: id,
-            players: hub.snapshot(),
-            capacity: hub.capacity,
+            players: room.hub.snapshot(),
+            capacity: room.hub.capacity,
           });
-          broadcast({ type: "joined", player: result.player }, id);
+          broadcast(slug, { type: "joined", player: result.player }, id);
           return;
         }
 
+        // Everything else requires having walked in first
+        const slug = roomOf.get(id);
+        if (!slug) return;
+        const room = rooms.get(slug);
+        if (!room?.hub.has(id)) return;
+
         if (parsed.type === "say") {
-          if (!hub.has(id)) return;
           const text = typeof parsed.text === "string" ? parsed.text.trim().slice(0, 500) : "";
           if (!text) return;
-          relaySpeech(id, text, parsed.scope === "nearby" ? "nearby" : "room");
+          relaySpeech(slug, id, text, parsed.scope === "nearby" ? "nearby" : "room");
           return;
         }
 
         if (parsed.type === "world") {
-          // Only someone in the room may change it
-          if (!hub.has(id)) return;
           if (!isWorldChange(parsed.change)) return;
-          applyWorldChange(id, parsed.change);
+          applyWorldChange(slug, id, parsed.change);
           return;
         }
 
         if (parsed.type === "move") {
-          hub.move(id, {
+          room.hub.move(id, {
             x: coerceNumber(parsed.x),
             y: coerceNumber(parsed.y),
             facing: coerceFacing(parsed.facing),
@@ -282,7 +325,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       });
 
       // A pong proves the browser is still there even when nobody is walking
-      ws.on("pong", () => hub.touch(id));
+      ws.on("pong", () => {
+        const slug = roomOf.get(id);
+        if (slug) rooms.get(slug)?.hub.touch(id);
+      });
 
       ws.on("close", () => drop(id));
       ws.on("error", (err) => {
@@ -299,7 +345,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     clearInterval(heartbeat);
   });
 
-  log.info(`room socket attached on ${path} (capacity ${hub.capacity} humans)`);
+  log.info(`room socket attached on ${path}`);
 
-  return hub;
+  return { rooms };
 }

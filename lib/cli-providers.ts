@@ -8,7 +8,7 @@
  */
 
 import { accessSync, constants, mkdirSync } from "fs";
-import { delimiter, join } from "path";
+import { delimiter, isAbsolute, join } from "path";
 import { homedir } from "os";
 
 export type CliProviderId = "auggie" | "claude" | "claude-api";
@@ -112,7 +112,12 @@ export function resolveBin(provider: CliProvider): string {
 
 // ── Seat workspaces ────────────────────────────────────
 
-const WORKSPACE_ROOT = ".agent-workspaces";
+/**
+ * Where seat sandboxes live. In the cloud this must point at mounted storage —
+ * a container's own filesystem is wiped on every deploy, which would throw away
+ * everything the agents have written.
+ */
+const WORKSPACE_ROOT = process.env.AGENT_WORKSPACE_ROOT ?? ".agent-workspaces";
 
 /** Filesystem-safe directory name for a seat. */
 function slugify(seatKey: string): string {
@@ -126,7 +131,8 @@ function slugify(seatKey: string): string {
  * apart, so one room's agents cannot read another's work.
  */
 export function ensureSeatWorkspace(seatKey: string, room = "local"): string | undefined {
-  const dir = join(process.cwd(), WORKSPACE_ROOT, slugify(room), slugify(seatKey));
+  const base = isAbsolute(WORKSPACE_ROOT) ? WORKSPACE_ROOT : join(process.cwd(), WORKSPACE_ROOT);
+  const dir = join(base, slugify(room), slugify(seatKey));
   try {
     mkdirSync(dir, { recursive: true });
     return dir;

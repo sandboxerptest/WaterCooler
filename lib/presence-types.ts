@@ -45,6 +45,8 @@ export interface PresencePlayer {
 
 export interface JoinMessage {
   type: "join";
+  /** Which room to walk into; absent means the default one. */
+  room?: string;
   name: string;
   spriteKey: string;
   x: number;

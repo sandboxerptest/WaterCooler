@@ -19,6 +19,7 @@ import WorkerPanel from "./WorkerPanel";
 import SeatManagerModal from "./SeatManagerModal";
 import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
+import NamePrompt from "./NamePrompt";
 
 export default function GameHud() {
   const { state } = useStudio();
@@ -142,6 +143,7 @@ export default function GameHud() {
 
   return (
     <div className="hud-overlay">
+      <NamePrompt />
       {/* Top area: logo | agent pills | tool buttons */}
       <TopBar
         seats={state.seats}

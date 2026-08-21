@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.data
+.agent-workspaces
+.claude
+*.log
+.env*.local

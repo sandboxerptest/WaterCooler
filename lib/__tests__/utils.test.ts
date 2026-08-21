@@ -91,16 +91,28 @@ describe("getDefaultGatewayUrl", () => {
 
   it("returns ws:// URL based on window.location for http", () => {
     globalThis.window = {
-      location: { protocol: "http:", host: "myapp.local:3000" },
+      location: { protocol: "http:", host: "myapp.local:3000", pathname: "/", search: "" },
     } as unknown as Window & typeof globalThis;
-    expect(getDefaultGatewayUrl()).toBe("ws://myapp.local:3000/api/gateway");
+    expect(getDefaultGatewayUrl()).toBe("ws://myapp.local:3000/api/gateway?room=local");
+  });
+
+  it("carries the room, so runs are billed and sandboxed to the right one", () => {
+    globalThis.window = {
+      location: {
+        protocol: "http:",
+        host: "myapp.local:3000",
+        pathname: "/r/design-standup",
+        search: "",
+      },
+    } as unknown as Window & typeof globalThis;
+    expect(getDefaultGatewayUrl()).toBe("ws://myapp.local:3000/api/gateway?room=design-standup");
   });
 
   it("returns wss:// URL based on window.location for https", () => {
     globalThis.window = {
-      location: { protocol: "https:", host: "myapp.local" },
+      location: { protocol: "https:", host: "myapp.local", pathname: "/", search: "" },
     } as unknown as Window & typeof globalThis;
-    expect(getDefaultGatewayUrl()).toBe("wss://myapp.local/api/gateway");
+    expect(getDefaultGatewayUrl()).toBe("wss://myapp.local/api/gateway?room=local");
   });
 
   it("prefers env var over window.location", () => {

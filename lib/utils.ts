@@ -1,4 +1,5 @@
 import type { AgentProvider } from "@/types/game";
+import { roomFromLocation } from "./rooms";
 
 /**
  * Returns the configured agent provider.
@@ -36,7 +37,11 @@ export function getDefaultGatewayUrl() {
 
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${window.location.host}/api/gateway`;
+    // The bridge needs to know which room a run belongs to: the roster it can
+    // delegate to, the sandbox it writes in and the budget it spends are all
+    // per room.
+    const room = encodeURIComponent(roomFromLocation(window.location));
+    return `${protocol}//${window.location.host}/api/gateway?room=${room}`;
   }
 
   return "ws://localhost:3000/api/gateway";
