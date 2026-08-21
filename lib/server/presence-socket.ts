@@ -13,11 +13,14 @@ import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
 import { DEFAULT_ROOM, getRoomStore } from "./room-store";
 import { createLogger } from "../logger";
+import { randomUUID as messageId } from "crypto";
 import {
+  EARSHOT_PX,
   HEARTBEAT_MS,
   TICK_MS,
   isClientMessage,
   isWorldChange,
+  type SayScope,
   type WorldChange,
   type Facing,
   type ServerMessage,
@@ -160,6 +163,54 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     );
   };
 
+  /**
+   * Pass on something a human said, and keep it with the room's history so it
+   * is still there after a refresh.
+   *
+   * "nearby" is filtered by the positions presence already tracks: it reaches
+   * whoever is within earshot, which is the point of having an office rather
+   * than a chat window.
+   */
+  const relaySpeech = (authorId: string, text: string, scope: SayScope) => {
+    const roster = hub.snapshot();
+    const author = roster.find((player) => player.id === authorId);
+    if (!author) return;
+
+    const said = {
+      type: "said" as const,
+      id: messageId(),
+      from: { id: author.id, name: author.name },
+      text,
+      at: new Date().toISOString(),
+      scope,
+    };
+
+    try {
+      getRoomStore().appendMessage(DEFAULT_ROOM, {
+        id: said.id,
+        runId: "",
+        role: "player",
+        content: text,
+        actorName: author.name,
+        timestamp: said.at,
+        sessionKey: getRoomStore().getSnapshot(DEFAULT_ROOM).activeSessionKey ?? "main",
+      });
+    } catch (err) {
+      log.warn("could not keep what was said:", (err as Error).message);
+    }
+
+    for (const [id, socket] of sockets) {
+      if (id === authorId) continue;
+      if (scope === "nearby") {
+        const listener = roster.find((player) => player.id === id);
+        if (!listener) continue;
+        const distance = Math.hypot(listener.x - author.x, listener.y - author.y);
+        if (distance > EARSHOT_PX) continue;
+      }
+      send(socket, said);
+    }
+  };
+
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (req.url !== path) return;
     if (!checkOrigin(req, socket)) return;
@@ -201,6 +252,14 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             capacity: hub.capacity,
           });
           broadcast({ type: "joined", player: result.player }, id);
+          return;
+        }
+
+        if (parsed.type === "say") {
+          if (!hub.has(id)) return;
+          const text = typeof parsed.text === "string" ? parsed.text.trim().slice(0, 500) : "";
+          if (!text) return;
+          relaySpeech(id, text, parsed.scope === "nearby" ? "nearby" : "room");
           return;
         }
 

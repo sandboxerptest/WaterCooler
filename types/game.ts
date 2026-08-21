@@ -83,7 +83,7 @@ export interface ChatMessageBase {
 }
 
 interface TextChatMessage extends ChatMessageBase {
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "player";
   content: string;
   /** true while assistant message is still receiving streaming deltas */
   streaming?: boolean;

@@ -27,15 +27,18 @@ export default function MessageBubble({
     if (onStop) onStop();
   };
 
+  // Three voices in one log: you, another person in the room, and an agent
+  const variant = msg.role === "user" ? "user" : msg.role === "player" ? "player" : "assistant";
+
   return (
-    <div
-      className={`hud-chat__bubble ${
-        msg.role === "user" ? "hud-chat__bubble--user" : "hud-chat__bubble--assistant"
-      }`}
-    >
+    <div className={`hud-chat__bubble hud-chat__bubble--${variant}`}>
       <div className="hud-chat__header">
         <div className="hud-chat__role">
-          {msg.role === "user" ? "You" : (msg.actorName ?? actorName ?? "Assistant")}
+          {msg.role === "user"
+            ? "You"
+            : msg.role === "player"
+              ? `${msg.actorName ?? "Someone"} · here`
+              : (msg.actorName ?? actorName ?? "Assistant")}
         </div>
         {canStop && msg.role === "user" && (
           <button

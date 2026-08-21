@@ -196,9 +196,17 @@ export class OfficeScene extends Phaser.Scene {
     const unsubLeft = gameEvents.on("presence-left", (id) => {
       this.remotePlayers.remove(id);
     });
+    const unsubSaid = gameEvents.on("player-said", (playerId, text) => {
+      this.remotePlayers.say(playerId, text);
+    });
+    const unsubSelfSaid = gameEvents.on("self-said", (text) => {
+      this.player?.say(text);
+    });
     this.cleanupPresence = () => {
       unsubPresence();
       unsubLeft();
+      unsubSaid();
+      unsubSelfSaid();
     };
     this.initBossSeat(bossSpawn);
 

@@ -132,6 +132,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     seatConfigs: seatConfigRef,
     seats: seatsRef,
     tasks: tasksRef,
+    activeSessionKey: activeSessionKeyRef,
   });
 
   // ── Bootstrap: restore world state from the server + auto-connect ──

@@ -76,7 +76,18 @@ export interface WorldMessage {
   change: WorldChange;
 }
 
-export type ClientMessage = JoinMessage | MoveMessage | WorldMessage;
+/** How far a "nearby" remark carries, in pixels — roughly five tiles. */
+export const EARSHOT_PX = 260;
+
+export type SayScope = "room" | "nearby";
+
+export interface SayMessage {
+  type: "say";
+  text: string;
+  scope: SayScope;
+}
+
+export type ClientMessage = JoinMessage | MoveMessage | WorldMessage | SayMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -125,6 +136,16 @@ export interface WorldBroadcast {
   by?: { id: string; name: string };
 }
 
+/** Something a human said, as heard by everyone in range. */
+export interface SaidMessage {
+  type: "said";
+  id: string;
+  from: { id: string; name: string };
+  text: string;
+  at: string;
+  scope: SayScope;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | RejectedMessage
@@ -132,12 +153,13 @@ export type ServerMessage =
   | PlayerJoinedMessage
   | PlayerLeftMessage
   | WorldBroadcast
-  | BudgetMessage;
+  | BudgetMessage
+  | SaidMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;
   const type = (value as { type?: unknown }).type;
-  return type === "join" || type === "move" || type === "world";
+  return type === "join" || type === "move" || type === "world" || type === "say";
 }
 
 const WORLD_ENTITIES = ["task", "message", "seat", "session"] as const;

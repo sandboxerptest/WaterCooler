@@ -37,6 +37,11 @@ export class RemotePlayerManager {
     }
   }
 
+  /** Put a remark above the right person's head. */
+  say(id: string, text: string) {
+    this.players.get(id)?.say(text);
+  }
+
   remove(id: string) {
     const player = this.players.get(id);
     if (!player) return;

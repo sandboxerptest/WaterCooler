@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { SPRITE_KEY, FRAME_HEIGHT } from "../config/animations";
+import { ChatBubble } from "./ChatBubble";
 import type { PresencePlayer } from "@/lib/presence-types";
 
 /**
@@ -28,6 +29,7 @@ export class RemotePlayer {
   private facing: PresencePlayer["facing"] = "down";
   private moving = false;
   private currentAnim = "";
+  private bubble: ChatBubble;
 
   constructor(scene: Phaser.Scene, player: PresencePlayer) {
     this.id = player.id;
@@ -50,7 +52,13 @@ export class RemotePlayer {
       .setOrigin(0.5, 0)
       .setDepth(20);
 
+    this.bubble = new ChatBubble(scene);
     this.applyAnimation(player.facing, false);
+  }
+
+  /** Show what this person just said, above their head. */
+  say(text: string, ttl = 6000) {
+    this.bubble.show(text, this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6, ttl);
   }
 
   /** Latest report from the server. */
@@ -79,6 +87,7 @@ export class RemotePlayer {
     }
 
     this.nameTag.setPosition(this.sprite.x, this.sprite.y + FRAME_HEIGHT / 2 + 2);
+    this.bubble.updatePosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6);
   }
 
   private applyAnimation(facing: PresencePlayer["facing"], moving: boolean) {
@@ -91,6 +100,7 @@ export class RemotePlayer {
   }
 
   destroy() {
+    this.bubble.destroy();
     this.sprite.destroy();
     this.nameTag.destroy();
   }

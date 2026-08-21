@@ -341,6 +341,12 @@
   border-color: var(--pixel-accent);
 }
 
+/* A person in the room, distinct from both you and any agent */
+.hud-chat__bubble--player {
+  background: rgba(120, 190, 255, 0.12);
+  border-color: rgba(120, 190, 255, 0.55);
+}
+
 .hud-chat__bubble--assistant {
   background: rgba(0, 0, 0, 0.35);
   border-color: var(--pixel-border);

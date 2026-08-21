@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { SPRITE_KEY, MOVE_SPEED, ALL_ANIMS, FRAME_WIDTH, FRAME_HEIGHT } from "../config/animations";
+import { ChatBubble } from "./ChatBubble";
 
 type Direction = "down" | "up" | "left" | "right";
 
@@ -10,6 +11,7 @@ export class Player {
   private facing: Direction;
   private arrow: Phaser.GameObjects.Sprite | null = null;
   private hasMovedOnce = false;
+  private bubble: ChatBubble | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number, facing: Direction = "left") {
     this.facing = facing;
@@ -39,6 +41,12 @@ export class Player {
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
     this.sprite.anims.play(`idle-${this.facing}`);
+    this.bubble = new ChatBubble(scene);
+  }
+
+  /** Show what this player just said, above their own head. */
+  say(text: string, ttl = 6000) {
+    this.bubble?.show(text, this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6, ttl);
   }
 
   private initArrow(scene: Phaser.Scene, x: number, y: number) {

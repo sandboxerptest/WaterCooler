@@ -27,6 +27,10 @@ export interface GameEventMap {
   "presence-count": [count: number, capacity: number];
   /** What the room has spent on agents, and the ceiling it stops at. */
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
+  /** Someone said something out loud: show it over their character. */
+  "player-said": [playerId: string, text: string];
+  /** This browser's own remark, to show over our own character. */
+  "self-said": [text: string];
   "task-aborted": [runId: string];
   "task-completed": [runId: string];
   "task-failed": [runId: string];

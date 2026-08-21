@@ -18,6 +18,8 @@ export interface WorldSyncRefs {
   seats: MutableRefObject<SeatState[]>;
   /** Current tasks, so a remote update can be compared against what we had. */
   tasks: MutableRefObject<TaskItem[]>;
+  /** Which session the panel is showing, so speech lands where it is read. */
+  activeSessionKey: MutableRefObject<string | undefined>;
 }
 
 /**
@@ -64,6 +66,25 @@ export function useWorldSync(refs: WorldSyncRefs) {
     const release = acquireRoomSocket();
 
     const unsubscribe = onRoomMessage((message) => {
+      if (message.type === "said") {
+        // Humans get their own role so the panel and the bubbles can tell a
+        // person apart from an agent at a glance.
+        refs.dispatch.current({
+          type: "UPSERT_CHAT",
+          message: {
+            id: message.id,
+            runId: "",
+            role: "player",
+            content: message.text,
+            actorName: message.from.name,
+            timestamp: message.at,
+            sessionKey: refs.activeSessionKey.current ?? "main",
+          } as ChatMessage,
+        });
+        gameEvents.emit("player-said", message.from.id, message.text);
+        return;
+      }
+
       if (message.type !== "world") return;
       const { change, by } = message;
 
