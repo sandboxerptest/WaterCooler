@@ -320,6 +320,23 @@ export class OfficeScene extends Phaser.Scene {
     if (this.gamepad.justPressed("panelNext")) gameEvents.emit("hud-cycle-panel", 1);
     if (this.gamepad.justPressed("panelClose")) gameEvents.emit("hud-close-panel");
 
+    // B is Escape. Every prompt in the game already closes on Escape, so
+    // rather than teaching each one about controllers, the button becomes the
+    // key — which also covers any dialog added later.
+    if (this.gamepad.justPressed("cancel")) {
+      const escape = new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        keyCode: 27,
+        which: 27,
+        bubbles: true,
+        cancelable: true,
+      });
+      // One dispatch is enough: it bubbles document → window, so listeners on
+      // either receive it exactly once
+      document.dispatchEvent(escape);
+    }
+
     if (this.terminalOpen || this.whiteboardOpen || isInputFocused()) {
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
