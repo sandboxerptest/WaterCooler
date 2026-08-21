@@ -17,6 +17,9 @@ import { tmpdir } from "os";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
 import { ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
+import { onRunCompleted, type CompletedRun } from "./server/achievement-rules";
+import { humansInRoom } from "./server/presence-socket";
+import { achievementFor } from "./achievements";
 import { DEFAULT_ROOM_SLUG, normaliseRoomSlug } from "./rooms";
 import {
   ensureSeatWorkspace,
@@ -181,6 +184,36 @@ function providerBlocked(room: string): string | null {
   return null;
 }
 
+/**
+ * Announce badges an agent just earned. Sent on the bridge's own channel, the
+ * same way budget updates are, so every watching UI can celebrate.
+ */
+function announceAchievements(room: string, run: CompletedRun) {
+  for (const item of onRunCompleted(run)) {
+    const definition = achievementFor(item.code);
+    if (!definition) continue;
+    for (const client of clients) {
+      if (client.room !== room) continue;
+      if (client.ws.readyState !== WebSocket.OPEN) continue;
+      sendFrame(client, {
+        type: "event",
+        event: "achievement",
+        payload: {
+          code: item.code,
+          subjectType: item.subjectType,
+          subjectId: item.subjectId,
+          subjectName: item.subjectName,
+          title: definition.title,
+          description: definition.description,
+          icon: definition.icon,
+          at: item.earnedAt,
+        },
+        seq: client.seq++,
+      });
+    }
+  }
+}
+
 /** Tell every watcher where the room stands against its limit. */
 function broadcastBudget(room: string) {
   try {
@@ -316,13 +349,14 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   // Lifecycle start
   sendEvent(state, "agent", { runId, sessionKey, stream: "lifecycle", data: { phase: "start" } });
 
+  const startedAt = Date.now();
   const spec = provider.buildRun({
     message,
     personality: buildPersonality(state.room, params),
     sessionId: state.sessionMap.get(sessionKey),
     // Attach the MCP server for worker dispatch if we have a roster
     mcpConfigPath: writeMcpConfig(state.room),
-    model: (params.model as string | undefined) ?? process.env.AGENT_TOWN_MODEL,
+    model: (params.model as string | undefined) ?? process.env.WATERCOOLER_MODEL,
     workspaceDir: provider.usesWorkspaces
       ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey, state.room)
       : undefined,
@@ -338,9 +372,12 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       cwd: spec.cwd,
       env: {
         ...process.env,
-        AGENT_TOWN_PORT: port,
-        AGENT_TOWN_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
-        AGENT_TOWN_DISPATCH_SECRET: dispatchSecret,
+        WATERCOOLER_PORT: port,
+        WATERCOOLER_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
+        WATERCOOLER_DISPATCH_SECRET: dispatchSecret,
+        // Delegated work must land in the room that asked for it: the roster,
+        // the sandbox and the spend ceiling are all per room.
+        WATERCOOLER_ROOM: state.room,
       },
     });
   } catch (err) {
@@ -435,6 +472,15 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
     }
 
     recordSpend(state.room, parsed);
+    announceAchievements(state.room, {
+      room: state.room,
+      seatId: params.seatId as string | undefined,
+      seatLabel: (params.seatLabel as string | undefined) ?? "Someone",
+      durationMs: Date.now() - startedAt,
+      costUsd: parsed.costUsd,
+      dispatched: false,
+      humansPresent: humansInRoom(state.room),
+    });
 
     // Store the CLI session id so the next message to this seat resumes it
     if (parsed.sessionId) {
@@ -625,7 +671,7 @@ function getMcpServerPath(): string {
   // Resolve the MCP server script relative to the project root.
   // In dev (tsx) process.cwd() is the project root; in prod the server
   // is started from the package root.  Either way, lib/mcp/ lives there.
-  return join(process.cwd(), "lib", "mcp", "agent-town-mcp.mjs");
+  return join(process.cwd(), "lib", "mcp", "watercooler-mcp.mjs");
 }
 
 /** Write (or reuse) a temporary MCP config file pointing at our stdio server. */
@@ -636,13 +682,13 @@ function writeMcpConfig(room: string): string | null {
   try {
     const config = {
       mcpServers: {
-        "agent-town": {
+        watercooler: {
           command: "node",
           args: [getMcpServerPath()],
         },
       },
     };
-    const dir = join(tmpdir(), "agent-town-mcp");
+    const dir = join(tmpdir(), "watercooler-mcp");
     mkdirSync(dir, { recursive: true });
     const filePath = join(dir, `mcp-config-${process.pid}.json`);
     writeFileSync(filePath, JSON.stringify(config), "utf-8");
@@ -713,11 +759,12 @@ export function dispatchToWorker(
       sessionId: dispatchSessions.get(seatSessionKey),
       // A dispatched worker does not delegate onward, so no MCP config.
       mcpConfigPath: null,
-      model: process.env.AGENT_TOWN_MODEL,
+      model: process.env.WATERCOOLER_MODEL,
       workspaceDir: provider.usesWorkspaces ? ensureSeatWorkspace(seat.label, room) : undefined,
     });
 
     log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
+    const startedAt = Date.now();
 
     runningCount += 1;
     let child: ChildProcess;
@@ -800,6 +847,16 @@ export function dispatchToWorker(
 
       const parsed = provider.parseResult(stdout);
       recordSpend(room, parsed);
+      announceAchievements(room, {
+        room,
+        seatId,
+        seatLabel: seat.label,
+        durationMs: Date.now() - startedAt,
+        costUsd: parsed?.costUsd,
+        // Work that arrived here came from another agent, not a person
+        dispatched: true,
+        humansPresent: humansInRoom(room),
+      });
       const responseText = parsed ? parsed.text : stdout.trim();
 
       // Store session for future resume

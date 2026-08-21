@@ -108,6 +108,16 @@ CREATE TABLE IF NOT EXISTS sessions (
   PRIMARY KEY (room, session_key)
 );
 
+CREATE TABLE IF NOT EXISTS achievements (
+  room         TEXT NOT NULL,
+  subject_type TEXT NOT NULL,
+  subject_id   TEXT NOT NULL,
+  code         TEXT NOT NULL,
+  subject_name TEXT NOT NULL,
+  earned_at    TEXT NOT NULL,
+  PRIMARY KEY (room, subject_type, subject_id, code)
+);
+
 CREATE INDEX IF NOT EXISTS tasks_by_room ON tasks (room, position);
 CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
 CREATE INDEX IF NOT EXISTS sessions_by_room ON sessions (room, position);
@@ -149,11 +159,86 @@ export class RoomStore {
 
   /** Additive migrations for databases created by an earlier version. */
   private migrate() {
-    try {
-      this.db.exec("ALTER TABLE rooms ADD COLUMN spend_usd REAL NOT NULL DEFAULT 0");
-    } catch {
-      // Already present, which is the common case
+    for (const statement of [
+      "ALTER TABLE rooms ADD COLUMN spend_usd REAL NOT NULL DEFAULT 0",
+      "ALTER TABLE tasks ADD COLUMN requested_by_name TEXT",
+    ]) {
+      try {
+        this.db.exec(statement);
+      } catch {
+        // Already present, which is the common case
+      }
     }
+  }
+
+  // ── Achievements ──────────────────────────────────────
+
+  /**
+   * Record an achievement. Returns true only the first time, so callers can
+   * treat a true result as "announce this" without tracking state themselves.
+   */
+  award(
+    room: string,
+    subjectType: string,
+    subjectId: string,
+    code: string,
+    subjectName: string,
+  ): boolean {
+    this.ensureRoom(room);
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO achievements
+           (room, subject_type, subject_id, code, subject_name, earned_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(room, subjectType, subjectId, code, subjectName, new Date().toISOString());
+    return result.changes > 0;
+  }
+
+  listAchievements(room: string) {
+    this.ensureRoom(room);
+    return this.db
+      .prepare(
+        `SELECT subject_type AS subjectType, subject_id AS subjectId, code,
+                subject_name AS subjectName, earned_at AS earnedAt
+         FROM achievements WHERE room = ? ORDER BY earned_at`,
+      )
+      .all(room) as Array<{
+      subjectType: string;
+      subjectId: string;
+      code: string;
+      subjectName: string;
+      earnedAt: string;
+    }>;
+  }
+
+  /** How many tasks a seat has finished, for "first time" style rules. */
+  countCompletedTasksForSeat(room: string, seatId: string): number {
+    this.ensureRoom(room);
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS n FROM tasks WHERE room = ? AND seat_id = ? AND status = ?")
+      .get(room, seatId, "completed") as { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
+  /** Seats a given person has given work to, and how many seats are staffed. */
+  assignmentBreadth(room: string, requesterName: string): { assigned: number; staffed: number } {
+    this.ensureRoom(room);
+    const assigned = this.db
+      .prepare(
+        `SELECT COUNT(DISTINCT seat_id) AS n FROM tasks
+         WHERE room = ? AND requested_by_name = ? AND seat_id IS NOT NULL`,
+      )
+      .get(room, requesterName) as { n: number } | undefined;
+
+    const seats = parseRows(
+      this.db.prepare("SELECT data FROM seats WHERE room = ?").all(room) as DataRow[],
+    ) as Array<{ assigned?: boolean }>;
+
+    return {
+      assigned: assigned?.n ?? 0,
+      staffed: seats.filter((seat) => seat.assigned).length,
+    };
   }
 
   /**
@@ -352,6 +437,14 @@ export class RoomStore {
         position,
         JSON.stringify(task),
       );
+
+    // Kept in a column so "gave work to every seat" is a query rather than a scan
+    const requesterName = asString(task.requestedByName);
+    if (requesterName) {
+      this.db
+        .prepare("UPDATE tasks SET requested_by_name = ? WHERE room = ? AND task_id = ?")
+        .run(requesterName, room, id);
+    }
 
     this.trim(room, "tasks", LIMITS.tasks, "DESC");
   }

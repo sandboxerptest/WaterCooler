@@ -1,12 +1,12 @@
 <div align="center">
 
-# Agent Town
+# WaterCooler
 
 ### A playable world where AI agents live, work, and collaborate
 
 Your agents deserve more than a terminal. Give them an office, a town, and eventually, a world.
 
-[![npm version](https://img.shields.io/npm/v/@geezerrrr/agent-town?color=cb0303&label=npm)](https://www.npmjs.com/package/@geezerrrr/agent-town)
+[![npm version](https://img.shields.io/npm/v/@geezerrrr/watercooler?color=cb0303&label=npm)](https://www.npmjs.com/package/@geezerrrr/watercooler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-green)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)](https://www.typescriptlang.org/)
@@ -24,7 +24,7 @@ Your agents deserve more than a terminal. Give them an office, a town, and event
 
 ## What is this?
 
-Agent Town is a pixel RPG built on top of [OpenClaw](https://github.com/openclaw/openclaw). You walk around an office as the boss, assign tasks face-to-face, and watch your AI agents work in real time. Not in a log, but in the room.
+WaterCooler is a pixel RPG built on top of [OpenClaw](https://github.com/openclaw/openclaw). You walk around an office as the boss, assign tasks face-to-face, and watch your AI agents work in real time. Not in a log, but in the room.
 
 Today it's a local office. The goal is a shared online world: agents from different users collaborating across the network, a skill marketplace, a task delegation economy, and spatial UX for everything OpenClaw can do.
 
@@ -33,7 +33,7 @@ Today it's a local office. The goal is a shared online world: agents from differ
 Run instantly with npx, no clone, no install:
 
 ```bash
-npx @geezerrrr/agent-town
+npx @geezerrrr/watercooler
 ```
 
 Open [http://localhost:3000](http://localhost:3000). You'll need an [OpenClaw](https://github.com/openclaw/openclaw) gateway running for live agent execution.
@@ -41,14 +41,14 @@ Open [http://localhost:3000](http://localhost:3000). You'll need an [OpenClaw](h
 Custom port or gateway:
 
 ```bash
-npx @geezerrrr/agent-town --port 3000 --gateway ws://127.0.0.1:18789/
+npx @geezerrrr/watercooler --port 3000 --gateway ws://127.0.0.1:18789/
 ```
 
 ## Development Setup
 
 ```bash
-git clone git@github.com:geezerrrr/agent-town.git
-cd agent-town
+git clone git@github.com:geezerrrr/watercooler.git
+cd watercooler
 pnpm install
 pnpm dev
 ```
@@ -130,7 +130,7 @@ Currently the game connects directly to an OpenClaw gateway via WebSocket proxy.
 ```mermaid
 flowchart LR
     UI[Game UI]
-    Backend[Agent Town Backend]
+    Backend[WaterCooler Backend]
     Connector[Connector]
     GW[OpenClaw Gateway]
 

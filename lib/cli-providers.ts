@@ -231,7 +231,7 @@ function parseClaudeResult(raw: string): CliParsedResult | null {
  * MCP tools are not auto-approved in headless mode, so the dispatch tool has
  * to be named explicitly or delegation silently fails.
  */
-const CLAUDE_DISPATCH_TOOL = "mcp__agent-town__dispatch_to_worker";
+const CLAUDE_DISPATCH_TOOL = "mcp__watercooler__dispatch_to_worker";
 
 const claudeProvider: CliProvider = {
   id: "claude",

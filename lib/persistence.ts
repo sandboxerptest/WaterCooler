@@ -32,10 +32,29 @@ export interface PersistedSeatConfig {
 
 // ── Generic helpers ────────────────────────────────────
 
+/** Keys were prefixed "agent-town:" before the rename. */
+const LEGACY_PREFIX = "agent-town:";
+const CURRENT_PREFIX = "watercooler:";
+
+/**
+ * Read a preference, adopting the pre-rename value if this browser still has
+ * one. Without this the rename would silently forget everyone's display name,
+ * music volume and gateway settings.
+ */
 export function lsGet<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
-    const raw = localStorage.getItem(key);
+    let raw = localStorage.getItem(key);
+
+    if (raw === null && key.startsWith(CURRENT_PREFIX)) {
+      const legacyKey = key.replace(CURRENT_PREFIX, LEGACY_PREFIX);
+      raw = localStorage.getItem(legacyKey);
+      if (raw !== null) {
+        localStorage.setItem(key, raw);
+        localStorage.removeItem(legacyKey);
+      }
+    }
+
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;

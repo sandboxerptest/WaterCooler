@@ -56,14 +56,14 @@ function handleDispatch(req: IncomingMessage, res: ServerResponse) {
   });
   req.on("end", () => {
     try {
-      const { seatId, task } = JSON.parse(body);
+      const { seatId, task, room } = JSON.parse(body);
       if (!seatId || !task) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "seatId and task are required" }));
         return;
       }
 
-      dispatchToWorker(seatId, task)
+      dispatchToWorker(seatId, task, typeof room === "string" ? room : undefined)
         .then((result) => {
           res.writeHead(result.error ? 500 : 200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));

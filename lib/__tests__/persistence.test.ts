@@ -124,3 +124,28 @@ describe("gateway config", () => {
     expect(loadGatewayConfig()).toBeNull();
   });
 });
+
+describe("rename migration", () => {
+  it("adopts a value stored under the old prefix", async () => {
+    // The rename must not forget someone's display name or volume
+    storage._store.set("agent-town:player-name", JSON.stringify("Robert"));
+    const mod = await loadModule();
+    expect(mod.lsGet("watercooler:player-name", "Guest")).toBe("Robert");
+  });
+
+  it("moves it across, so the old key stops being read", async () => {
+    storage._store.set("agent-town:bgm-volume", JSON.stringify(0));
+    const mod = await loadModule();
+    mod.lsGet("watercooler:bgm-volume", 1);
+
+    expect(storage._store.get("watercooler:bgm-volume")).toBe("0");
+    expect(storage._store.has("agent-town:bgm-volume")).toBe(false);
+  });
+
+  it("prefers a current value over a stale legacy one", async () => {
+    storage._store.set("agent-town:player-name", JSON.stringify("Old"));
+    storage._store.set("watercooler:player-name", JSON.stringify("New"));
+    const mod = await loadModule();
+    expect(mod.lsGet("watercooler:player-name", "Guest")).toBe("New");
+  });
+});

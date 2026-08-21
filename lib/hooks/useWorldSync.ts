@@ -66,6 +66,19 @@ export function useWorldSync(refs: WorldSyncRefs) {
     const release = acquireRoomSocket();
 
     const unsubscribe = onRoomMessage((message) => {
+      if (message.type === "achievement") {
+        gameEvents.emit("achievement-earned", {
+          code: message.code,
+          subjectType: message.subjectType,
+          subjectId: message.subjectId,
+          subjectName: message.subjectName,
+          title: message.title,
+          description: message.description,
+          icon: message.icon,
+        });
+        return;
+      }
+
       if (message.type === "said") {
         // Humans get their own role so the panel and the bubbles can tell a
         // person apart from an agent at a glance.

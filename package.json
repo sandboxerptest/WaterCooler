@@ -1,10 +1,10 @@
 {
-  "name": "@geezerrrr/agent-town",
+  "name": "@geezerrrr/watercooler",
   "version": "0.4.1",
   "description": "Pixel-style AI Agent collaboration community — visualize your agents working in a pixel art office",
   "license": "MIT",
   "bin": {
-    "agent-town": "bin/agent-town.mjs"
+    "watercooler": "bin/watercooler.mjs"
   },
   "files": [
     "bin/",

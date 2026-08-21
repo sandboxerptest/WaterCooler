@@ -1,5 +1,5 @@
 /**
- * Production server for Agent Town (npx / standalone).
+ * Production server for WaterCooler (npx / standalone).
  *
  * Reads the Next.js config from the standalone build output and creates
  * an HTTP server with Next.js request handler + WebSocket proxy.
@@ -53,7 +53,7 @@ app
 
     server.listen(port, () => {
       log.info("");
-      log.info("  \x1b[36m\x1b[1mAgent Town\x1b[0m is running!");
+      log.info("  \x1b[36m\x1b[1mWaterCooler\x1b[0m is running!");
       log.info("");
       log.info(`  > Local:   \x1b[4mhttp://localhost:${port}\x1b[0m`);
       if (AGENT_PROVIDER === "auggie") {
@@ -65,6 +65,6 @@ app
     });
   })
   .catch((err) => {
-    log.error("Failed to start Agent Town:", err);
+    log.error("Failed to start WaterCooler:", err);
     process.exit(1);
   });

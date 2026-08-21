@@ -12,10 +12,10 @@ const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log(`
-  \x1b[36m\x1b[1mAgent Town\x1b[0m  Pixel-style AI Agent collaboration community
+  \x1b[36m\x1b[1mWaterCooler\x1b[0m  Pixel-style AI Agent collaboration community
 
   Usage
-    $ agent-town [options]
+    $ watercooler [options]
 
   Options
     --port     <number>  Port to listen on             (default: 3000)
@@ -25,10 +25,10 @@ if (args.includes("--help") || args.includes("-h")) {
     -h, --help           Show this help message
 
   Examples
-    $ agent-town
-    $ agent-town --port 8080
-    $ agent-town --gateway ws://192.168.1.100:18789/
-    $ agent-town --provider auggie
+    $ watercooler
+    $ watercooler --port 8080
+    $ watercooler --gateway ws://192.168.1.100:18789/
+    $ watercooler --provider auggie
 `);
   process.exit(0);
 }

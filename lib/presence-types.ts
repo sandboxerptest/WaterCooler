@@ -131,6 +131,19 @@ export interface BudgetMessage {
   halted: boolean;
 }
 
+/** Somebody — or some agent — just earned a badge. */
+export interface AchievementMessage {
+  type: "achievement";
+  code: string;
+  subjectType: "agent" | "human";
+  subjectId: string;
+  subjectName: string;
+  title: string;
+  description: string;
+  icon: string;
+  at: string;
+}
+
 export interface WorldBroadcast {
   type: "world";
   change: WorldChange;
@@ -156,7 +169,8 @@ export type ServerMessage =
   | PlayerLeftMessage
   | WorldBroadcast
   | BudgetMessage
-  | SaidMessage;
+  | SaidMessage
+  | AchievementMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;

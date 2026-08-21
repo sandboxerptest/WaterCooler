@@ -293,7 +293,7 @@ export class GatewayClient {
         maxProtocol: 3,
         client: {
           id: "gateway-client",
-          displayName: "Agent Town",
+          displayName: "WaterCooler",
           version: "1.0.0",
           platform: "web",
           mode: "backend",

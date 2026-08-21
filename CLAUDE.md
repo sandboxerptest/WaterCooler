@@ -1,4 +1,4 @@
-# Agent Town
+# WaterCooler
 
 ## 项目目标
 

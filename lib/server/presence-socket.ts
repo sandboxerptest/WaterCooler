@@ -16,6 +16,8 @@ import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
 import { normaliseRoomSlug } from "../rooms";
+import { achievementFor, type EarnedAchievement } from "../achievements";
+import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
 import { createLogger } from "../logger";
 import {
   EARSHOT_PX,
@@ -66,6 +68,13 @@ interface Room {
   sockets: Map<string, WebSocket>;
 }
 
+let occupancyLookup: (slug: string) => number = () => 0;
+
+/** How many humans are in a room right now. Zero when the socket is not up. */
+export function humansInRoom(slug: string): number {
+  return occupancyLookup(slug);
+}
+
 export function attachPresenceSocket(server: import("http").Server, path = "/api/room/socket") {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -98,6 +107,25 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     for (const [id, socket] of room.sockets) {
       if (id === exceptId) continue;
       send(socket, message);
+    }
+  };
+
+  /** Tell the room about badges just earned, so it is a shared moment. */
+  const announce = (slug: string, earned: EarnedAchievement[]) => {
+    for (const item of earned) {
+      const definition = achievementFor(item.code);
+      if (!definition) continue;
+      broadcast(slug, {
+        type: "achievement",
+        code: item.code,
+        subjectType: item.subjectType,
+        subjectId: item.subjectId,
+        subjectName: item.subjectName,
+        title: definition.title,
+        description: definition.description,
+        icon: definition.icon,
+        at: item.earnedAt,
+      });
     }
   };
 
@@ -184,6 +212,16 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       scope,
     };
 
+    // "First thing said" is judged before this remark is stored
+    let isFirstSpeech = false;
+    try {
+      isFirstSpeech = !getRoomStore()
+        .getSnapshot(slug)
+        .messages.some((message) => (message as { role?: string }).role === "player");
+    } catch {
+      // If we cannot tell, do not award rather than award wrongly
+    }
+
     try {
       const store = getRoomStore();
       store.appendMessage(slug, {
@@ -208,6 +246,8 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       }
       send(socket, said);
     }
+
+    announce(slug, onPlayerSpoke(slug, author.name, scope, isFirstSpeech));
   };
 
   // Standing still is not the same as being gone: a player who never moves
@@ -292,6 +332,17 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             capacity: room.hub.capacity,
           });
           broadcast(slug, { type: "joined", player: result.player }, id);
+
+          announce(slug, onPlayerJoined(slug, result.player.name));
+          if (room.hub.count >= room.hub.capacity) {
+            announce(
+              slug,
+              onRoomFull(
+                slug,
+                room.hub.snapshot().map((p) => p.name),
+              ),
+            );
+          }
           return;
         }
 
@@ -346,6 +397,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   });
 
   log.info(`room socket attached on ${path}`);
+
+  // The agent bridge needs to know whether anyone is in the office, for badges
+  // that depend on working unattended
+  occupancyLookup = (slug: string) => rooms.get(slug)?.hub.count ?? 0;
 
   return { rooms };
 }

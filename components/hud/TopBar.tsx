@@ -35,7 +35,7 @@ export default function TopBar({
     <div className="layout-top">
       {/* Left: logo */}
       <div className="layout-topbar__title">
-        <span className="layout-topbar__logo">AGENT TOWN</span>
+        <span className="layout-topbar__logo">WATERCOOLER</span>
       </div>
 
       {/* Center: agent pills (each pill is its own floating element) */}

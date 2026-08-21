@@ -371,6 +371,15 @@ export function wireGatewayClient(client: GatewayClient, refs: HandlerRefs) {
     }
   });
 
+  client.on("achievement", (payload: unknown) => {
+    const badge = payload as { code?: string; title?: string };
+    if (!badge?.code || !badge?.title) return;
+    gameEvents.emit(
+      "achievement-earned",
+      badge as Parameters<typeof gameEvents.emit<"achievement-earned">>[1],
+    );
+  });
+
   client.on("budget", (payload: unknown) => {
     const budget = payload as { spentUsd?: number; limitUsd?: number; halted?: boolean };
     if (typeof budget?.spentUsd !== "number" || typeof budget?.limitUsd !== "number") return;

@@ -202,11 +202,21 @@ export class OfficeScene extends Phaser.Scene {
     const unsubSelfSaid = gameEvents.on("self-said", (text) => {
       this.player?.say(text);
     });
+    const unsubBadge = gameEvents.on("achievement-earned", (achievement) => {
+      // Agents celebrate at their desk; people celebrate wherever they stand
+      if (achievement.subjectType === "agent") {
+        const worker = this.workerManager.findBySeatId(achievement.subjectId);
+        worker?.showBubble(`${achievement.icon} ${achievement.title}`, 5000);
+        return;
+      }
+      this.remotePlayers.say(achievement.subjectId, `${achievement.icon} ${achievement.title}`);
+    });
     this.cleanupPresence = () => {
       unsubPresence();
       unsubLeft();
       unsubSaid();
       unsubSelfSaid();
+      unsubBadge();
     };
     this.initBossSeat(bossSpawn);
 
