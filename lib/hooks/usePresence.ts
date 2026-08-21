@@ -6,6 +6,7 @@ import { acquireRoomSocket, onRoomMessage, onRoomOpen, sendRoom } from "../room-
 import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
+import { rememberSelfId } from "../presence-self";
 import { MOVE_SEND_MS, type Facing, type PresencePlayer } from "../presence-types";
 
 const log = createLogger("Presence");
@@ -55,6 +56,7 @@ export function usePresence() {
       switch (message.type) {
         case "welcome":
           selfIdRef.current = message.you;
+          rememberSelfId(message.you);
           capacityRef.current = message.capacity;
           joinedRef.current = true;
           log.info(`joined as ${message.you} (${message.players.length}/${message.capacity})`);

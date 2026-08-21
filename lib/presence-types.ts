@@ -98,7 +98,21 @@ export interface BoardMessage {
   done?: boolean;
 }
 
-export type ClientMessage = JoinMessage | MoveMessage | WorldMessage | SayMessage | BoardMessage;
+/** A move in a game of ping pong, on its way to the other player. */
+export interface PongRelayMessage {
+  type: "pong";
+  /** Who it is for. The server will not send it anywhere else. */
+  to: string;
+  payload: import("./pong/protocol").PongPayload;
+}
+
+export type ClientMessage =
+  | JoinMessage
+  | MoveMessage
+  | WorldMessage
+  | SayMessage
+  | BoardMessage
+  | PongRelayMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -153,6 +167,19 @@ export interface AchievementMessage {
   at: string;
 }
 
+/** A line for the room's log, as it happens. */
+export interface ActivityBroadcast {
+  type: "activity";
+  entry: import("./activity").ActivityEntry;
+}
+
+/** The same, arriving at the other end, stamped with who sent it. */
+export interface PongBroadcast {
+  type: "pong";
+  from: { id: string; name: string };
+  payload: import("./pong/protocol").PongPayload;
+}
+
 export interface WorldBroadcast {
   type: "world";
   change: WorldChange;
@@ -188,13 +215,20 @@ export type ServerMessage =
   | BudgetMessage
   | SaidMessage
   | AchievementMessage
+  | ActivityBroadcast
+  | PongBroadcast
   | BoardBroadcast;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;
   const type = (value as { type?: unknown }).type;
   return (
-    type === "join" || type === "move" || type === "world" || type === "say" || type === "board"
+    type === "join" ||
+    type === "move" ||
+    type === "world" ||
+    type === "say" ||
+    type === "board" ||
+    type === "pong"
   );
 }
 

@@ -16,6 +16,8 @@ import { gameEvents } from "@/lib/events";
 import { createLogger } from "@/lib/logger";
 import {
   BOSS_INTERACT_DISTANCE,
+  BUCKET_INTERACT_DISTANCE,
+  CAULDRON_INTERACT_DISTANCE,
   PF_PADDING,
   PRESS_E_STYLE,
   BOSS_PROMPT_OFFSET_X,
@@ -45,6 +47,12 @@ export class OfficeScene extends Phaser.Scene {
   private promptText: Phaser.GameObjects.Text | null = null;
   /** Boards you can walk up to and draw on. */
   private boardZones: Array<{ x: number; y: number }> = [];
+  private cauldronZone: { x: number; y: number } | null = null;
+  private cauldronPrompt: Phaser.GameObjects.Text | null = null;
+  private pinballOpen = false;
+  private bucketZone: { x: number; y: number } | null = null;
+  private bucketPrompt: Phaser.GameObjects.Text | null = null;
+  private pingPongOpen = false;
   private boardPrompt: Phaser.GameObjects.Text | null = null;
   private whiteboardOpen = false;
   private eKey!: Phaser.Input.Keyboard.Key;
@@ -165,6 +173,15 @@ export class OfficeScene extends Phaser.Scene {
       .filter((poi) => /white ?board|black ?board|chalk ?board/i.test(poi.name))
       .map((poi) => ({ x: poi.x, y: poi.y }));
 
+    // The cauldron in the back room is a pinball table, for reasons the office
+    // has never explained
+    const cauldron = pois.find((poi) => /cauldron/i.test(poi.name));
+    this.cauldronZone = cauldron ? { x: cauldron.x, y: cauldron.y } : null;
+
+    // And the bucket above it is a ping pong table, on the same logic
+    const bucket = pois.find((poi) => /bucket/i.test(poi.name));
+    this.bucketZone = bucket ? { x: bucket.x, y: bucket.y } : null;
+
     this.player = new Player(this, bossSpawn.x, bossSpawn.y, bossSpawn.facing);
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
@@ -217,6 +234,29 @@ export class OfficeScene extends Phaser.Scene {
     const unsubSelfSaid = gameEvents.on("self-said", (text) => {
       this.player?.say(text);
     });
+    // Listening for the open events rather than only setting the flag where
+    // they are emitted means a game opened any other way — the ?pinball=1 and
+    // ?board=1 links, say — still stops the character walking about behind it.
+    const unsubPinballOpen = gameEvents.on("open-pinball", () => {
+      this.pinballOpen = true;
+    });
+
+    const unsubPongOpen = gameEvents.on("open-pingpong", () => {
+      this.pingPongOpen = true;
+    });
+
+    const unsubPongClosed = gameEvents.on("pingpong-closed", () => {
+      this.pingPongOpen = false;
+    });
+
+    const unsubBoardOpen = gameEvents.on("open-whiteboard", () => {
+      this.whiteboardOpen = true;
+    });
+
+    const unsubPinballClosed = gameEvents.on("pinball-closed", () => {
+      this.pinballOpen = false;
+    });
+
     const unsubBoardClosed = gameEvents.on("whiteboard-closed", () => {
       this.whiteboardOpen = false;
     });
@@ -235,7 +275,12 @@ export class OfficeScene extends Phaser.Scene {
       unsubSaid();
       unsubSelfSaid();
       unsubBadge();
+      unsubBoardOpen();
       unsubBoardClosed();
+      unsubPinballOpen();
+      unsubPinballClosed();
+      unsubPongOpen();
+      unsubPongClosed();
     };
     this.initBossSeat(bossSpawn);
 
@@ -279,6 +324,22 @@ export class OfficeScene extends Phaser.Scene {
       .setDepth(20)
       .setVisible(false);
     this.boardPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+
+    this.cauldronPrompt = this.add
+      .text(0, 0, "Press E to play", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
+      .setResolution(window.devicePixelRatio * 2)
+      .setOrigin(0.5, 1)
+      .setDepth(20)
+      .setVisible(false);
+    this.cauldronPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+
+    this.bucketPrompt = this.add
+      .text(0, 0, "Press E for ping pong", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
+      .setResolution(window.devicePixelRatio * 2)
+      .setOrigin(0.5, 1)
+      .setDepth(20)
+      .setVisible(false);
+    this.bucketPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
 
     const kb = this.input.keyboard;
     if (!kb) return;
@@ -366,7 +427,13 @@ export class OfficeScene extends Phaser.Scene {
       document.dispatchEvent(escape);
     }
 
-    if (this.terminalOpen || this.whiteboardOpen || isInputFocused()) {
+    if (
+      this.terminalOpen ||
+      this.whiteboardOpen ||
+      this.pinballOpen ||
+      this.pingPongOpen ||
+      isInputFocused()
+    ) {
       // A dialog is up, so the pad drives its buttons instead of the character
       this.updateDialogNavigation();
       this.workerManager.updateAll();
@@ -418,10 +485,51 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     if (atBoard && interactPressed) {
-      this.whiteboardOpen = true;
       this.boardPrompt?.setVisible(false);
       gameEvents.emit("open-whiteboard");
       return;
+    }
+
+    // The water bucket: walk up, press E, play ping pong
+    if (this.bucketZone) {
+      const distance = Phaser.Math.Distance.Between(
+        this.player.sprite.x,
+        this.player.sprite.y,
+        this.bucketZone.x,
+        this.bucketZone.y,
+      );
+      const atBucket = distance < BUCKET_INTERACT_DISTANCE;
+
+      this.bucketPrompt?.setVisible(atBucket && !this.pingPongOpen);
+      if (atBucket) this.bucketPrompt?.setPosition(this.bucketZone.x, this.bucketZone.y - 36);
+
+      if (atBucket && interactPressed) {
+        this.bucketPrompt?.setVisible(false);
+        gameEvents.emit("open-pingpong");
+        return;
+      }
+    }
+
+    // The cauldron: walk up, press E, play pinball
+    if (this.cauldronZone) {
+      const distance = Phaser.Math.Distance.Between(
+        this.player.sprite.x,
+        this.player.sprite.y,
+        this.cauldronZone.x,
+        this.cauldronZone.y,
+      );
+      const atCauldron = distance < CAULDRON_INTERACT_DISTANCE;
+
+      this.cauldronPrompt?.setVisible(atCauldron && !this.pinballOpen);
+      if (atCauldron) {
+        this.cauldronPrompt?.setPosition(this.cauldronZone.x, this.cauldronZone.y - 44);
+      }
+
+      if (atCauldron && interactPressed) {
+        this.cauldronPrompt?.setVisible(false);
+        gameEvents.emit("open-pinball");
+        return;
+      }
     }
 
     // Boss terminal interaction (only when no worker is nearby)

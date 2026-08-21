@@ -7,6 +7,15 @@ export const GAME_HEIGHT = 720;
 // ── Interaction distances (pixels) ───────────────────────
 export const INTERACT_DISTANCE = 48;
 export const BOSS_INTERACT_DISTANCE = 34;
+/**
+ * The cauldron is a 2x2 prop with a solid footprint, so a player cannot get
+ * within 34px of its middle from any side. Measured from the two sides it can
+ * be approached from, the nearest standing spot is about 53px out.
+ */
+export const CAULDRON_INTERACT_DISTANCE = 62;
+
+/** The bucket sits on a bench, so you reach it from the front or the side. */
+export const BUCKET_INTERACT_DISTANCE = 54;
 
 // ── Pathfinder ───────────────────────────────────────────
 export const PF_CELL_SIZE = 16;
@@ -61,6 +70,12 @@ export const LS_CONFIG = "watercooler:gateway-config";
 export const LS_BGM_VOLUME = "watercooler:bgm-volume";
 export const LS_PLAYER_NAME = "watercooler:player-name";
 export const LS_ONBOARDING_DONE = "watercooler:onboarding-done";
+export const LS_SIDEBAR_WIDTH = "watercooler:sidebar-width";
+
+/** How wide the chat and activity column can be dragged. */
+export const SIDEBAR_MIN_WIDTH = 280;
+export const SIDEBAR_MAX_WIDTH = 680;
+export const SIDEBAR_DEFAULT_WIDTH = 380;
 
 // ── Audio ────────────────────────────────────────────────
 export const DEFAULT_BGM_VOLUME = 0.45;

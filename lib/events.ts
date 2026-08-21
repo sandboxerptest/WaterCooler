@@ -37,6 +37,14 @@ export interface GameEventMap {
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
   /** A controller appeared or went away, with its layout for prompts. */
   "gamepad-state": [id: string | null, layout: string];
+  /** Somebody walked up to the water bucket and pressed E. */
+  "open-pingpong": [];
+  /** The ping pong table was closed, so the office takes input again. */
+  "pingpong-closed": [];
+  /** Somebody walked up to the cauldron and pressed E. */
+  "open-pinball": [];
+  /** The cauldron was closed, so the office takes input again. */
+  "pinball-closed": [];
   /** Somebody walked up to a board and pressed E. */
   "open-whiteboard": [];
   /** The board was closed, so the office takes input again. */
