@@ -1,31 +1,15 @@
 /**
- * localStorage persistence helpers.
+ * Device-local preferences.
  *
- * Centralizes all read/write operations so the store
- * doesn't need to know about serialization details.
+ * World state — tasks, chat, sessions, seats — lives on the server now; see
+ * lib/room-client.ts. What stays here is everything that is a property of this
+ * browser rather than of the world: gateway connection settings, music volume,
+ * and whether onboarding has been seen.
  */
 
-import type {
-  TaskItem,
-  ChatMessage,
-  GatewayConfig,
-  SessionRecord,
-  SeatType,
-  AgentConfig,
-} from "@/types/game";
+import type { GatewayConfig, SeatType, AgentConfig } from "@/types/game";
 import { createLogger } from "./logger";
-import {
-  LS_CONFIG,
-  LS_TASKS,
-  LS_CHAT,
-  LS_SESSIONS,
-  LS_ACTIVE_KEY,
-  LS_SEAT_CONFIG,
-  LS_BGM_VOLUME,
-  LS_ONBOARDING_DONE,
-  DEFAULT_BGM_VOLUME,
-  MAX_SESSIONS,
-} from "./constants";
+import { LS_CONFIG, LS_BGM_VOLUME, LS_ONBOARDING_DONE, DEFAULT_BGM_VOLUME } from "./constants";
 
 const log = createLogger("Persistence");
 
@@ -68,52 +52,6 @@ export function loadGatewayConfig(): GatewayConfig | null {
 
 export function saveGatewayConfig(config: GatewayConfig) {
   lsSet(LS_CONFIG, config);
-}
-
-export function loadActiveSessionKey(): string | null {
-  return lsGet<string | null>(LS_ACTIVE_KEY, null);
-}
-
-export function saveActiveSessionKey(key: string | undefined) {
-  lsSet(LS_ACTIVE_KEY, key ?? null);
-}
-
-export function loadTasks(fallbackSessionKey: string): TaskItem[] {
-  return lsGet<TaskItem[]>(LS_TASKS, []).map((task) => ({
-    ...task,
-    sessionKey: task.sessionKey ?? fallbackSessionKey,
-  }));
-}
-
-export function saveTasks(tasks: TaskItem[]) {
-  lsSet(LS_TASKS, tasks.slice(0, 200));
-}
-
-export function loadChat(fallbackSessionKey: string): ChatMessage[] {
-  return lsGet<ChatMessage[]>(LS_CHAT, []).map((msg) => ({
-    ...msg,
-    sessionKey: msg.sessionKey ?? fallbackSessionKey,
-  }));
-}
-
-export function saveChat(messages: ChatMessage[]) {
-  lsSet(LS_CHAT, messages.slice(-400));
-}
-
-export function loadSessions(): SessionRecord[] {
-  return lsGet<SessionRecord[]>(LS_SESSIONS, []);
-}
-
-export function saveSessions(sessions: SessionRecord[]) {
-  lsSet(LS_SESSIONS, sessions.slice(0, MAX_SESSIONS));
-}
-
-export function loadSeatConfigs(): PersistedSeatConfig[] {
-  return lsGet<PersistedSeatConfig[]>(LS_SEAT_CONFIG, []);
-}
-
-export function saveSeatConfigs(configs: PersistedSeatConfig[]) {
-  lsSet(LS_SEAT_CONFIG, configs);
 }
 
 export function loadBgmVolume(): number {

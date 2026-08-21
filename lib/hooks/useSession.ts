@@ -5,7 +5,7 @@ import type { ChatMessage } from "@/types/game";
 import type { GatewayClient } from "../gateway";
 import { loadSessionPreview } from "../gateway-handler";
 import { gameEvents } from "../events";
-import { saveActiveSessionKey } from "../persistence";
+import { saveRoomPatch } from "../room-client";
 import type { Action } from "../reducer";
 import { generateSessionKey, MAIN_SESSION_KEY } from "../reducer";
 import { createLogger } from "../logger";
@@ -43,7 +43,7 @@ export function useSession(refs: SessionRefs) {
     clearTransientState();
     refs.dispatch.current({ type: "NEW_SESSION", session: record });
     refs.setActiveSessionKey(newKey);
-    saveActiveSessionKey(newKey);
+    saveRoomPatch({ activeSessionKey: newKey });
   }, [refs, clearTransientState]);
 
   const switchSession = useCallback(
@@ -51,7 +51,7 @@ export function useSession(refs: SessionRefs) {
       if (sessionKey === refs.activeSessionKey.current) return;
 
       clearTransientState();
-      saveActiveSessionKey(sessionKey);
+      saveRoomPatch({ activeSessionKey: sessionKey ?? null });
 
       refs.dispatch.current({ type: "SWITCH_SESSION", sessionKey });
       refs.setActiveSessionKey(sessionKey);

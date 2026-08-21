@@ -14,20 +14,8 @@ import React from "react";
 import type { SeatState, TaskItem, GatewayConfig, ChatMessage } from "@/types/game";
 import type { StudioSnapshot } from "@/types/game";
 import { gameEvents } from "./events";
-import {
-  type PersistedSeatConfig,
-  loadGatewayConfig,
-  loadActiveSessionKey,
-  loadTasks,
-  loadChat,
-  loadSessions,
-  loadSeatConfigs,
-  saveTasks,
-  saveChat,
-  saveSessions,
-  saveSeatConfigs,
-  saveActiveSessionKey,
-} from "./persistence";
+import { type PersistedSeatConfig, loadGatewayConfig } from "./persistence";
+import { fetchRoomSnapshot, flushRoomWrites, saveRoomPatch } from "./room-client";
 import {
   type Action,
   reducer,
@@ -79,9 +67,19 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const activeSessionKeyRef = useRef<string | undefined>(undefined);
   const taskCounterRef = useRef(0);
 
+  /** True once the server snapshot has been applied; gates all writes. */
+  const hydratedRef = useRef(false);
+  /** Last seat layout the scene reported, so hydration can re-merge it. */
+  const discoveredSeatsRef = useRef<Parameters<typeof mergeDiscoveredSeats>[0] | null>(null);
+
+  const applySeatMerge = useCallback((discovered: Parameters<typeof mergeDiscoveredSeats>[0]) => {
+    const mergedSeats = mergeDiscoveredSeats(discovered, seatConfigRef.current, seatsRef.current);
+    dispatchRef.current({ type: "SYNC_SEATS", seats: mergedSeats });
+  }, []);
+
   const setActiveSessionKey = useCallback((sessionKey?: string) => {
     activeSessionKeyRef.current = sessionKey;
-    saveActiveSessionKey(sessionKey);
+    saveRoomPatch({ activeSessionKey: sessionKey ?? null });
     dispatchRef.current({ type: "SET_ACTIVE_SESSION", sessionKey });
   }, []);
 
@@ -123,69 +121,95 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     nextTaskId: () => `aw_task_${++taskCounterRef.current}_${Date.now()}`,
   });
 
-  // ── Bootstrap: restore persisted state + auto-connect ──
+  // ── Bootstrap: restore world state from the server + auto-connect ──
   const inflightTaskIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     const savedConfig = loadGatewayConfig();
     if (savedConfig) gateway.configRef.current = savedConfig;
 
-    const savedActiveKey = loadActiveSessionKey();
-    const fallbackSessionKey = savedActiveKey ?? MAIN_SESSION_KEY;
-    const tasks = loadTasks(fallbackSessionKey);
-    const chat = loadChat(fallbackSessionKey);
-    const sessions = loadSessions();
-    const seatConfigs = loadSeatConfigs();
-    seatConfigRef.current = seatConfigs;
-    const hasRestoredData = tasks.length > 0 || chat.length > 0 || sessions.length > 0;
-    activeSessionKeyRef.current =
-      savedActiveKey ?? (hasRestoredData ? MAIN_SESSION_KEY : undefined);
+    let cancelled = false;
+    let connectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    if (hasRestoredData) {
-      dispatch({
-        type: "RESTORE",
-        tasks,
-        chatMessages: chat,
-        sessions,
-        activeSessionKey: fallbackSessionKey,
-      });
-    }
-    if (activeSessionKeyRef.current) {
-      dispatch({ type: "SET_ACTIVE_SESSION", sessionKey: activeSessionKeyRef.current });
-      saveActiveSessionKey(activeSessionKeyRef.current);
-    }
+    const bootstrap = async () => {
+      const snapshot = await fetchRoomSnapshot(MAIN_SESSION_KEY);
+      if (cancelled) return;
 
-    // Track inflight tasks so other effects can reference them
-    const inflight = tasks.filter(
-      (t) => t.status === "running" || t.status === "submitted" || t.status === "returning",
-    );
-    inflightTaskIdsRef.current = inflight.map((t) => t.taskId);
-    for (const t of inflight) {
-      if (t.runId) gateway.seenStartsRef.current.add(t.runId);
-      gateway.seenStartsRef.current.add(t.taskId);
-      if (t.actorName && t.runId) gateway.runActorRef.current.set(t.runId, t.actorName);
-    }
+      const savedActiveKey = snapshot.activeSessionKey ?? undefined;
+      const fallbackSessionKey = savedActiveKey ?? MAIN_SESSION_KEY;
+      const tasks = snapshot.tasks;
+      const chat = snapshot.messages;
+      const sessions = snapshot.sessions;
+      seatConfigRef.current = snapshot.seats;
 
-    // Auto-connect: immediately for CLI providers (no config needed), or if config was saved for OpenClaw
-    if (isCliProvider()) {
-      const t = setTimeout(
-        () => gateway.connectImpl({ url: getDefaultGatewayUrl(), token: "" }),
-        80,
+      // Writes are blocked until this point: the save effects run on mount with
+      // empty state, and against a server that would erase the room before its
+      // contents arrived.
+      hydratedRef.current = true;
+
+      // The scene may already have reported its seats while the snapshot was in
+      // flight; re-merge so restored names and roles are not lost.
+      if (discoveredSeatsRef.current) {
+        applySeatMerge(discoveredSeatsRef.current);
+      }
+
+      const hasRestoredData = tasks.length > 0 || chat.length > 0 || sessions.length > 0;
+      activeSessionKeyRef.current =
+        savedActiveKey ?? (hasRestoredData ? MAIN_SESSION_KEY : undefined);
+
+      if (hasRestoredData) {
+        dispatch({
+          type: "RESTORE",
+          tasks,
+          chatMessages: chat,
+          sessions,
+          activeSessionKey: fallbackSessionKey,
+        });
+      }
+      if (activeSessionKeyRef.current) {
+        dispatch({ type: "SET_ACTIVE_SESSION", sessionKey: activeSessionKeyRef.current });
+        saveRoomPatch({ activeSessionKey: activeSessionKeyRef.current });
+      }
+
+      // Track inflight tasks so other effects can reference them
+      const inflight = tasks.filter(
+        (t) => t.status === "running" || t.status === "submitted" || t.status === "returning",
       );
-      return () => clearTimeout(t);
-    }
-    if (savedConfig?.url) {
-      const t = setTimeout(() => gateway.connectImpl(savedConfig), 80);
-      return () => clearTimeout(t);
-    }
+      inflightTaskIdsRef.current = inflight.map((t) => t.taskId);
+      for (const t of inflight) {
+        if (t.runId) gateway.seenStartsRef.current.add(t.runId);
+        gateway.seenStartsRef.current.add(t.taskId);
+        if (t.actorName && t.runId) gateway.runActorRef.current.set(t.runId, t.actorName);
+      }
+
+      // Auto-connect: immediately for CLI providers (no config needed), or if
+      // config was saved for OpenClaw
+      if (isCliProvider()) {
+        connectTimer = setTimeout(
+          () => gateway.connectImpl({ url: getDefaultGatewayUrl(), token: "" }),
+          80,
+        );
+      } else if (savedConfig?.url) {
+        connectTimer = setTimeout(() => gateway.connectImpl(savedConfig), 80);
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+      if (connectTimer) clearTimeout(connectTimer);
+      // Anything still queued would otherwise be lost on navigation
+      void flushRoomWrites();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Seat sync: merge discovered seats with persisted configs ──
   useEffect(() => {
     const unsub = gameEvents.on("seats-discovered", (discovered) => {
-      const mergedSeats = mergeDiscoveredSeats(discovered, seatConfigRef.current, seatsRef.current);
-      dispatchRef.current({ type: "SYNC_SEATS", seats: mergedSeats });
+      discoveredSeatsRef.current = discovered;
+      applySeatMerge(discovered);
 
       for (const task of tasksRef.current) {
         if (
@@ -206,7 +230,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       }
     });
     return unsub;
-  }, []);
+  }, [applySeatMerge]);
 
   // ── Stale task cleanup: mark inflight tasks as interrupted after timeout ──
   useEffect(() => {
@@ -241,11 +265,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Persist tasks + chat + sessions ──
+  // ── Persist tasks + chat + sessions to the room ──
   useEffect(() => {
-    saveTasks(state.tasks);
-    saveChat(state.chatMessages);
-    saveSessions(state.sessions);
+    if (!hydratedRef.current) return;
+    saveRoomPatch({
+      tasks: state.tasks,
+      messages: state.chatMessages,
+      sessions: state.sessions,
+    });
   }, [state.tasks, state.chatMessages, state.sessions]);
 
   useEffect(() => {
@@ -260,7 +287,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       agentConfig: seat.agentConfig,
     }));
     seatConfigRef.current = configs;
-    saveSeatConfigs(configs);
+    if (hydratedRef.current) saveRoomPatch({ seats: configs });
     gameEvents.emit("seat-configs-updated", state.seats);
 
     // Sync worker roster to server for auggie MCP dispatch
