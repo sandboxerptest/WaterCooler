@@ -8,6 +8,7 @@ import {
   detectPadLayout,
   padVelocity,
 } from "../GamepadInput";
+import { nextFocusIndex } from "@/lib/hooks/useGamepadFocus";
 
 const SPEED = 100;
 
@@ -167,5 +168,52 @@ describe("selectPad", () => {
     // directly does not care when it arrived.
     const alreadyThere = [pad({ id: "Xbox Wireless Controller (STANDARD GAMEPAD)" })];
     expect(selectPad(alreadyThere)).not.toBeNull();
+  });
+});
+
+describe("driving a dialog with the pad", () => {
+  it("reports the release as well as the press, for push-to-talk", () => {
+    const edges = new EdgeTracker();
+
+    edges.sample([PAD_BUTTON.A]);
+    expect(edges.justPressed(PAD_BUTTON.A)).toBe(true);
+    expect(edges.justReleased(PAD_BUTTON.A)).toBe(false);
+
+    edges.sample([PAD_BUTTON.A]); // still held
+    expect(edges.justPressed(PAD_BUTTON.A)).toBe(false);
+    expect(edges.justReleased(PAD_BUTTON.A)).toBe(false);
+
+    edges.sample([]);
+    expect(edges.justReleased(PAD_BUTTON.A)).toBe(true);
+
+    edges.sample([]);
+    expect(edges.justReleased(PAD_BUTTON.A)).toBe(false);
+  });
+
+  it("moves the focus ring with either axis of the d-pad", () => {
+    expect(buttonsForAction("menuLeft")).toEqual([PAD_BUTTON.DPAD_LEFT]);
+    expect(buttonsForAction("menuRight")).toEqual([PAD_BUTTON.DPAD_RIGHT]);
+  });
+});
+
+describe("where the focus ring goes next", () => {
+  it("steps forward and back", () => {
+    expect(nextFocusIndex(0, 1, 4)).toBe(1);
+    expect(nextFocusIndex(2, -1, 4)).toBe(1);
+  });
+
+  it("wraps at both ends, so the ring cannot be stranded", () => {
+    expect(nextFocusIndex(3, 1, 4)).toBe(0);
+    expect(nextFocusIndex(0, -1, 4)).toBe(3);
+  });
+
+  it("starts at whichever end the first press comes from", () => {
+    // Nothing in the dialog is focused yet: down opens at the top, up at the end
+    expect(nextFocusIndex(-1, 1, 4)).toBe(0);
+    expect(nextFocusIndex(-1, -1, 4)).toBe(3);
+  });
+
+  it("has nowhere to go in a dialog with no controls", () => {
+    expect(nextFocusIndex(-1, 1, 0)).toBe(-1);
   });
 });

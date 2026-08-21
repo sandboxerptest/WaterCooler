@@ -951,3 +951,16 @@
     gap: 4px;
   }
 }
+
+/* ── Controller focus ring ─────────────────────────────
+ *
+ * Drawn by hand rather than left to :focus-visible, which the browser only
+ * applies to focus it attributes to the keyboard — a pad moving focus with
+ * .focus() gets no ring at all, and an invisible cursor is not a cursor.
+ * Outline rather than border, so nothing in the dialog shifts as it moves.
+ */
+.pad-focus {
+  outline: 3px solid var(--pixel-accent);
+  outline-offset: 2px;
+  border-radius: var(--pixel-radius-sm);
+}

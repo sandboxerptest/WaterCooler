@@ -4,6 +4,7 @@ import MicButton from "@/components/hud/MicButton";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useStudio } from "@/lib/store";
 import { gameEvents } from "@/lib/events";
+import { useGamepadFocus } from "@/lib/hooks/useGamepadFocus";
 
 export default function TerminalModal() {
   const [open, setOpen] = useState(false);
@@ -11,6 +12,8 @@ export default function TerminalModal() {
   const [targetSeatId, setTargetSeatId] = useState<string | undefined>(undefined);
   const { state, assignTask, prepareSessionForSeat } = useStudio();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [padConnected, setPadConnected] = useState(false);
 
   const isConnected = state.connection === "connected";
 
@@ -39,6 +42,11 @@ export default function TerminalModal() {
       unsubQueue();
     };
   }, [prepareSessionForSeat]);
+
+  useEffect(() => gameEvents.on("gamepad-state", (id) => setPadConnected(id !== null)), []);
+
+  // The d-pad moves the ring between the text box, Assign, the mic and ESC
+  useGamepadFocus(panelRef, open);
 
   // Focus input when opened
   useEffect(() => {
@@ -93,6 +101,7 @@ export default function TerminalModal() {
       }}
     >
       <div
+        ref={panelRef}
         className="pixel-panel"
         style={{
           width: "min(520px, 90vw)",
@@ -156,6 +165,11 @@ export default function TerminalModal() {
               what="task"
             />
           </div>
+          {padConnected && (
+            <div style={{ fontSize: "8px", color: "var(--pixel-muted)", marginTop: "8px" }}>
+              D-pad move · A select (hold for the mic) · B close
+            </div>
+          )}
         </div>
       </div>
     </div>

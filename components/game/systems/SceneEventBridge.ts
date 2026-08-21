@@ -111,6 +111,14 @@ export function initSceneEventBridge(
     }),
   );
 
+  // However the terminal was opened — from the boss desk or from a worker's
+  // menu — the scene has to know, or it keeps walking the character about
+  // behind the dialog. Only the boss route used to say so, and the textarea
+  // taking focus hid it: the scene stands down for a focused text box too.
+  for (const opened of ["open-terminal", "open-terminal-queue"] as const) {
+    unsubs.push(gameEvents.on(opened, () => setTerminalOpen(true)));
+  }
+
   unsubs.push(
     gameEvents.on("terminal-closed", () => {
       setTerminalOpen(false);

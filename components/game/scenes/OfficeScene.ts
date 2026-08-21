@@ -301,6 +301,35 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── Update ─────────────────────────────────────────────
 
+  /**
+   * Send the open dialog somewhere to put its focus ring.
+   *
+   * Up and left step back, down and right step forward: a dialog's controls
+   * are a single loop, whichever way they happen to be laid out, so both axes
+   * mean the same thing and neither can strand you. A is the press, and it is
+   * reported on release too, for the mic's hold-to-talk.
+   */
+  private updateDialogNavigation() {
+    const pad = this.gamepad;
+
+    const back =
+      pad.justPressed("menuUp") ||
+      pad.justPressed("menuLeft") ||
+      pad.menuDirectionEdge() === -1 ||
+      pad.menuDirectionEdgeX() === -1;
+    const forward =
+      pad.justPressed("menuDown") ||
+      pad.justPressed("menuRight") ||
+      pad.menuDirectionEdge() === 1 ||
+      pad.menuDirectionEdgeX() === 1;
+
+    if (back) gameEvents.emit("hud-focus-move", -1);
+    else if (forward) gameEvents.emit("hud-focus-move", 1);
+
+    if (pad.justPressed("interact")) gameEvents.emit("hud-confirm", "down");
+    if (pad.justReleased("interact")) gameEvents.emit("hud-confirm", "up");
+  }
+
   update(_time: number, delta: number) {
     this.gamepad.poll();
 
@@ -338,6 +367,8 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     if (this.terminalOpen || this.whiteboardOpen || isInputFocused()) {
+      // A dialog is up, so the pad drives its buttons instead of the character
+      this.updateDialogNavigation();
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
       return;

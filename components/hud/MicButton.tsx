@@ -2,6 +2,7 @@
 
 import { Mic } from "lucide-react";
 import { useSpeechInput } from "@/lib/hooks/useSpeechInput";
+import { PAD_HOLD_ATTR } from "@/lib/hooks/useGamepadFocus";
 
 interface MicButtonProps {
   /** Called on release with everything recognised while held. Never called with empty text. */
@@ -103,6 +104,9 @@ export default function MicButton({ onTranscript, disabled, size = 40, what }: M
           }
         }}
         onBlur={finish}
+        // Tell a controller to hold this button rather than tap it: the pad
+        // sends the same Enter down/up the keyboard path already handles.
+        {...{ [PAD_HOLD_ATTR]: "true" }}
         disabled={unavailable}
         title={title}
         aria-label={title}

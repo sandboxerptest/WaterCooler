@@ -17,6 +17,14 @@ export interface GameEventMap {
   /** Gamepad shoulder buttons cycle HUD panels; Back closes the open one. */
   "hud-cycle-panel": [direction: -1 | 1];
   "hud-close-panel": [];
+  /**
+   * A dialog is open and the pad is driving it: move the focus ring, and
+   * press or release whatever it is sitting on. The scene owns the only
+   * gamepad poll, so the buttons reach React as events rather than a second
+   * reader of the Gamepad API.
+   */
+  "hud-focus-move": [delta: -1 | 1];
+  "hud-confirm": [phase: "down" | "up"];
   /** Where this browser's own character is, for the room socket to send on. */
   "player-moved": [position: { x: number; y: number; facing: string; moving: boolean }];
   /** Everyone else in the room, as the server last reported them. */

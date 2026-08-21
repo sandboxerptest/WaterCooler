@@ -37,6 +37,8 @@ export type PadAction =
   | "cancel"
   | "menuUp"
   | "menuDown"
+  | "menuLeft"
+  | "menuRight"
   | "panelPrev"
   | "panelNext"
   | "panelClose";
@@ -47,6 +49,8 @@ const ACTION_BUTTONS: Record<PadAction, number[]> = {
   cancel: [PAD_BUTTON.B],
   menuUp: [PAD_BUTTON.DPAD_UP],
   menuDown: [PAD_BUTTON.DPAD_DOWN],
+  menuLeft: [PAD_BUTTON.DPAD_LEFT],
+  menuRight: [PAD_BUTTON.DPAD_RIGHT],
   panelPrev: [PAD_BUTTON.LB],
   panelNext: [PAD_BUTTON.RB],
   panelClose: [PAD_BUTTON.BACK],
@@ -124,6 +128,10 @@ export class EdgeTracker {
     return this.current.has(button) && !this.previous.has(button);
   }
 
+  justReleased(button: number): boolean {
+    return this.previous.has(button) && !this.current.has(button);
+  }
+
   isDown(button: number): boolean {
     return this.current.has(button);
   }
@@ -172,6 +180,8 @@ export class GamepadInput {
   private pad: RawPad | null = null;
   private prevStickDir: -1 | 0 | 1 = 0;
   private stickEdge: -1 | 0 | 1 = 0;
+  private prevStickDirX: -1 | 0 | 1 = 0;
+  private stickEdgeX: -1 | 0 | 1 = 0;
   layout: PadLayout = "xbox";
 
   /** Told when a pad appears or disappears, so the HUD can show it. */
@@ -230,13 +240,19 @@ export class GamepadInput {
       this.edges.sample([]);
       this.prevStickDir = 0;
       this.stickEdge = 0;
+      this.prevStickDirX = 0;
+      this.stickEdgeX = 0;
       return;
     }
 
     // Menu navigation by stick needs an edge, or one flick scrolls the list
-    const dir = this.stickDirection(pad);
+    const dir = this.stickDirection(pad, 1);
     this.stickEdge = dir !== 0 && dir !== this.prevStickDir ? dir : 0;
     this.prevStickDir = dir;
+
+    const dirX = this.stickDirection(pad, 0);
+    this.stickEdgeX = dirX !== 0 && dirX !== this.prevStickDirX ? dirX : 0;
+    this.prevStickDirX = dirX;
 
     const pressed: number[] = [];
     for (let i = 0; i < pad.buttons.length; i++) {
@@ -267,10 +283,15 @@ export class GamepadInput {
     return buttonsForAction(action).some((b) => this.edges.justPressed(b));
   }
 
-  private stickDirection(pad: RawPad): -1 | 0 | 1 {
-    const y = pad.axes[1] ?? 0;
-    if (y < -0.6) return -1;
-    if (y > 0.6) return 1;
+  /** For anything held rather than tapped, like push-to-talk on the mic. */
+  justReleased(action: PadAction): boolean {
+    return buttonsForAction(action).some((b) => this.edges.justReleased(b));
+  }
+
+  private stickDirection(pad: RawPad, axis: 0 | 1): -1 | 0 | 1 {
+    const value = pad.axes[axis] ?? 0;
+    if (value < -0.6) return -1;
+    if (value > 0.6) return 1;
     return 0;
   }
 
@@ -280,5 +301,10 @@ export class GamepadInput {
    */
   menuDirectionEdge(): -1 | 0 | 1 {
     return this.stickEdge;
+  }
+
+  /** The same, sideways: a dialog's buttons usually sit in a row. */
+  menuDirectionEdgeX(): -1 | 0 | 1 {
+    return this.stickEdgeX;
   }
 }
