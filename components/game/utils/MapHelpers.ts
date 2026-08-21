@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { FRAME_WIDTH, FRAME_HEIGHT, SHEET_COLUMNS, type Direction } from "../config/animations";
+import { exteriorRects } from "@/lib/map-perimeter";
 
 export interface SeatDef {
   seatId: string;
@@ -92,6 +93,23 @@ export function parsePOIs(map: Phaser.Tilemaps.Tilemap): POIDef[] {
   return pois;
 }
 
+/**
+ * Where there is something to stand on, tile by tile.
+ *
+ * Both layers count: `floor` is the rooms, `ground` is the odd patch of
+ * different surface laid over them. Anything either one covers is inside.
+ */
+function floorGrid(map: Phaser.Tilemaps.Tilemap): boolean[][] {
+  return Array.from({ length: map.height }, (_, y) =>
+    Array.from(
+      { length: map.width },
+      (_, x) =>
+        map.getTileAt(x, y, false, "floor") !== null ||
+        map.getTileAt(x, y, false, "ground") !== null,
+    ),
+  );
+}
+
 export function buildCollisionRects(
   map: Phaser.Tilemaps.Tilemap,
   collisionGroup: Phaser.Physics.Arcade.StaticGroup,
@@ -123,25 +141,28 @@ export function buildCollisionRects(
     }
   }
 
-  // Block exterior area so workers never path outside the room
-  let wallMinX = Infinity,
-    wallMinY = Infinity,
-    wallMaxX = 0,
-    wallMaxY = 0;
-  for (const r of collisionRects) {
-    wallMinX = Math.min(wallMinX, r.x);
-    wallMinY = Math.min(wallMinY, r.y);
-    wallMaxX = Math.max(wallMaxX, r.x + r.width);
-    wallMaxY = Math.max(wallMaxY, r.y + r.height);
+  // Make the outside of the building solid.
+  //
+  // This used to be a rectangle around the extent of the walls, and it was
+  // only ever given to the pathfinder — which is why the workers stayed
+  // inside and the player could stroll out through any gap the walls happened
+  // to have. Now the exterior is worked out from the map and made solid for
+  // everyone, physics included.
+  for (const rect of exteriorRects(floorGrid(map), map.tileWidth)) {
+    const body = collisionGroup.create(
+      rect.x + rect.width / 2,
+      rect.y + rect.height / 2,
+      undefined,
+      undefined,
+      false,
+    ) as Phaser.Physics.Arcade.Sprite;
+    body.body!.setSize(rect.width, rect.height);
+    body.setVisible(false);
+    body.setActive(true);
+    (body.body as Phaser.Physics.Arcade.StaticBody).enable = true;
+
+    collisionRects.push(rect);
   }
-  const mapW = map.widthInPixels;
-  const mapH = map.heightInPixels;
-  if (wallMinX > 0) collisionRects.push({ x: 0, y: 0, width: wallMinX, height: mapH });
-  if (wallMinY > 0) collisionRects.push({ x: 0, y: 0, width: mapW, height: wallMinY });
-  if (wallMaxX < mapW)
-    collisionRects.push({ x: wallMaxX, y: 0, width: mapW - wallMaxX, height: mapH });
-  if (wallMaxY < mapH)
-    collisionRects.push({ x: 0, y: wallMaxY, width: mapW, height: mapH - wallMaxY });
 
   return collisionRects;
 }
