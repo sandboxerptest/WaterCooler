@@ -180,6 +180,15 @@ line, where it would be visible in process listings. If it is missing or
 malformed the run is refused with a plain sentence in the worker's bubble
 rather than a failed CLI exit.
 
+Runs in this mode use the CLI's `--bare` flag, which makes the API key the only
+credential: OAuth and the keychain are never read. Without it the CLI falls back
+to whatever account is signed in on the host, so an expired or mistyped key
+would still appear to work while quietly billing someone's subscription.
+
+A rejected key makes the CLI retry silently rather than exit, so every run is
+also bounded by `AGENT_RUN_TIMEOUT_MS` (default 180s). Past that the agent is
+stopped, the seat reports it plainly, and the concurrency slot is released.
+
 Three limits apply to every run, whether assigned directly or delegated:
 
 | Limit | Default | Env var |

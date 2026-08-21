@@ -132,6 +132,28 @@ const MAX_CONCURRENT_RUNS = Number(process.env.AGENT_MAX_CONCURRENT ?? 4);
 
 let runningCount = 0;
 
+/**
+ * A run that never finishes holds a concurrency slot forever. That is not
+ * hypothetical: given a rejected API key the CLI retries quietly, producing no
+ * output and never exiting, so without this the room would fill with invisible
+ * stuck runs and stop accepting work.
+ */
+const RUN_TIMEOUT_MS = Number(process.env.AGENT_RUN_TIMEOUT_MS ?? 180_000);
+
+/** Kill a run that has outstayed the limit. Returns a canceller. */
+function guardRunTime(child: ChildProcess, onTimeout: (seconds: number) => void): () => void {
+  const timer = setTimeout(() => {
+    onTimeout(Math.round(RUN_TIMEOUT_MS / 1000));
+    child.kill("SIGTERM");
+    // Escalate if it ignores the polite request
+    setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, 5000).unref?.();
+  }, RUN_TIMEOUT_MS);
+  timer.unref?.();
+  return () => clearTimeout(timer);
+}
+
 function atCapacity(): boolean {
   return runningCount >= MAX_CONCURRENT_RUNS;
 }
@@ -332,6 +354,19 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   state.runningProcesses.set(runId, child);
   runningCount += 1;
 
+  let timedOut = false;
+  const cancelTimeout = guardRunTime(child, (seconds) => {
+    timedOut = true;
+    log.error(`run ${runId} exceeded ${seconds}s and was stopped`);
+    sendEvent(state, "agent", {
+      runId,
+      sessionKey,
+      stream: "lifecycle",
+      data: { phase: "error", error: `The agent was stopped after ${seconds}s with no reply.` },
+    });
+    sendEvent(state, "chat", { runId, sessionKey, state: "error" });
+  });
+
   let stdout = "";
   let stderr = "";
 
@@ -344,6 +379,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   });
 
   child.on("error", (err) => {
+    cancelTimeout();
     log.error(`${provider.binName} process error for run ${runId}:`, err.message);
     state.runningProcesses.delete(runId);
     runningCount = Math.max(0, runningCount - 1);
@@ -357,8 +393,12 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   });
 
   child.on("close", (code) => {
+    cancelTimeout();
     state.runningProcesses.delete(runId);
     runningCount = Math.max(0, runningCount - 1);
+
+    // The timeout already told everyone; a kill signal is not a second failure
+    if (timedOut) return;
 
     if (code === null || code !== 0) {
       const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
@@ -697,6 +737,22 @@ export function dispatchToWorker(
       return;
     }
 
+    let timedOut = false;
+    const cancelTimeout = guardRunTime(child, (seconds) => {
+      timedOut = true;
+      log.error(`dispatch to ${seat.label} exceeded ${seconds}s and was stopped`);
+      broadcastEvent("agent", {
+        runId,
+        sessionKey,
+        stream: "lifecycle",
+        data: {
+          phase: "error",
+          error: `${seat.label} was stopped after ${seconds}s with no reply.`,
+        },
+      });
+      resolve({ result: "", error: `Stopped after ${seconds}s with no reply` });
+    });
+
     let stdout = "";
     let stderr = "";
 
@@ -708,6 +764,7 @@ export function dispatchToWorker(
     });
 
     child.on("error", (err) => {
+      cancelTimeout();
       runningCount = Math.max(0, runningCount - 1);
       log.error(`dispatch process error for run ${runId}:`, err.message);
       broadcastEvent("agent", {
@@ -720,7 +777,10 @@ export function dispatchToWorker(
     });
 
     child.on("close", (code) => {
+      cancelTimeout();
       runningCount = Math.max(0, runningCount - 1);
+      // The timeout already resolved this run
+      if (timedOut) return;
       if (code !== 0) {
         const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
         log.error(`dispatch failed for run ${runId}:`, errMsg);

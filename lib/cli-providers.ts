@@ -297,8 +297,15 @@ const claudeApiProvider: CliProvider = {
   },
 
   buildRun(options) {
-    // Identical argv to the signed-in provider; only the credential differs
-    return claudeProvider.buildRun(options);
+    const spec = claudeProvider.buildRun(options);
+
+    // --bare makes the API key the only credential: OAuth and the keychain are
+    // never read. Without it the CLI happily falls back to whatever account is
+    // signed in on the host, so a wrong key would still "work" and the server
+    // would be billing someone's subscription instead of the key you set.
+    // It also skips hooks, auto-memory and CLAUDE.md discovery, so a server
+    // agent stops inheriting the host user's configuration.
+    return { ...spec, args: ["--bare", ...spec.args] };
   },
 
   parseResult(raw) {
