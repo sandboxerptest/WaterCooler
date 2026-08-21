@@ -307,17 +307,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     seatConfigRef.current = configs;
     if (hydratedRef.current) syncSeats(configs);
     gameEvents.emit("seat-configs-updated", state.seats);
-
-    // Sync worker roster to server for auggie MCP dispatch
-    if (typeof window !== "undefined") {
-      fetch("/api/internal/seat-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seats: configs }),
-      }).catch(() => {
-        /* ignore — endpoint only exists in auggie mode */
-      });
-    }
+    // The agent bridge reads the roster from the room store, so syncSeats above
+    // is the only thing it needs; a separate push from each browser is what
+    // used to let one client's empty view wipe everyone's roster.
   }, [state.seats]);
 
   // ── Cleanup ──

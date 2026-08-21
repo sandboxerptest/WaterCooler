@@ -9,12 +9,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import next from "next";
 import { createLogger } from "./lib/logger";
 import { attachWsProxy } from "./lib/ws-proxy";
-import {
-  attachCliBridge,
-  dispatchToWorker,
-  validateDispatchSecret,
-  setWorkerRoster,
-} from "./lib/cli-bridge";
+import { attachCliBridge, dispatchToWorker, validateDispatchSecret } from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
 import { attachPresenceSocket } from "./lib/server/presence-socket";
 
@@ -86,39 +81,6 @@ function handleDispatch(req: IncomingMessage, res: ServerResponse) {
 
 // ── Seat config sync for auggie worker roster ──
 
-function handleSeatSync(req: IncomingMessage, res: ServerResponse) {
-  if (req.method !== "POST") {
-    res.writeHead(405);
-    res.end();
-    return;
-  }
-  let body = "";
-  req.on("data", (chunk: Buffer) => {
-    body += chunk.toString();
-  });
-  req.on("end", () => {
-    try {
-      const { seats } = JSON.parse(body);
-      if (Array.isArray(seats)) {
-        setWorkerRoster(
-          seats
-            .filter((s: { assigned?: boolean }) => s.assigned)
-            .map((s: { seatId: string; label: string; roleTitle?: string }) => ({
-              seatId: s.seatId,
-              label: s.label,
-              roleTitle: s.roleTitle,
-            })),
-        );
-      }
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
-    } catch {
-      res.writeHead(400);
-      res.end();
-    }
-  });
-}
-
 app
   .prepare()
   .then(() => {
@@ -127,10 +89,6 @@ app
       if (CLI_PROVIDER) {
         if (req.url === "/api/internal/dispatch") {
           handleDispatch(req, res);
-          return;
-        }
-        if (req.url === "/api/internal/seat-sync") {
-          handleSeatSync(req, res);
           return;
         }
       }

@@ -16,6 +16,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
+import { DEFAULT_ROOM, getRoomStore } from "./server/room-store";
 import {
   ensureSeatWorkspace,
   getCliProvider,
@@ -39,9 +40,38 @@ interface WorkerInfo {
   roleTitle?: string;
 }
 
-/** Module-level state so the dispatch endpoint can find active clients. */
-let activeClientState: ClientState | null = null;
-let workerRoster: WorkerInfo[] = [];
+/**
+ * Every connected UI. A room can have several people watching at once, so
+ * subagent activity is broadcast rather than sent to one privileged client.
+ */
+const clients = new Set<ClientState>();
+
+/**
+ * The roster is read from the room store rather than pushed by a client.
+ * When each browser posted its own view, whichever loaded last won — and a tab
+ * whose scene had not populated seats yet would publish an empty roster,
+ * silently stripping the main agent's ability to delegate.
+ */
+function getWorkerRoster(): WorkerInfo[] {
+  try {
+    const seats = getRoomStore().getSnapshot(DEFAULT_ROOM).seats as Array<{
+      seatId?: string;
+      label?: string;
+      roleTitle?: string;
+      assigned?: boolean;
+    }>;
+    return seats
+      .filter((seat) => seat.assigned && seat.seatId && seat.label)
+      .map((seat) => ({
+        seatId: seat.seatId as string,
+        label: seat.label as string,
+        roleTitle: seat.roleTitle,
+      }));
+  } catch (err) {
+    log.warn("could not read the roster:", (err as Error).message);
+    return [];
+  }
+}
 
 interface GatewayFrame {
   type: "req" | "res" | "event";
@@ -77,6 +107,22 @@ function sendFrame(state: ClientState, frame: GatewayFrame) {
 function sendEvent(state: ClientState, event: string, payload: Record<string, unknown>) {
   sendFrame(state, { type: "event", event, payload, seq: state.seq++ });
 }
+
+/**
+ * Send an event to every connected UI. Subagent activity belongs to the room,
+ * not to whoever happened to trigger it, so all watchers see the worker move.
+ */
+function broadcastEvent(event: string, payload: Record<string, unknown>) {
+  for (const client of clients) {
+    if (client.ws.readyState === WebSocket.OPEN) sendEvent(client, event, payload);
+  }
+}
+
+/**
+ * Resume ids for dispatched seats. Server-owned: the seat's conversation
+ * belongs to the room and must survive any one browser disconnecting.
+ */
+const dispatchSessions = new Map<string, string>();
 
 function sendResponse(
   state: ClientState,
@@ -120,6 +166,7 @@ function checkOrigin(req: IncomingMessage, socket: Duplex): boolean {
 // ── Chat send handler ──────────────────────────────────
 
 function buildWorkerRosterContext(currentSeatLabel?: string): string {
+  const workerRoster = getWorkerRoster();
   if (workerRoster.length <= 1) return "";
   const others = workerRoster.filter((w) => w.label !== currentSeatLabel);
   if (others.length === 0) return "";
@@ -184,7 +231,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       env: {
         ...process.env,
         AGENT_TOWN_PORT: port,
-        AGENT_TOWN_WORKERS: JSON.stringify(workerRoster),
+        AGENT_TOWN_WORKERS: JSON.stringify(getWorkerRoster()),
         AGENT_TOWN_DISPATCH_SECRET: dispatchSecret,
       },
     });
@@ -452,7 +499,8 @@ function getMcpServerPath(): string {
 
 /** Write (or reuse) a temporary MCP config file pointing at our stdio server. */
 function writeMcpConfig(): string | null {
-  if (workerRoster.length <= 1) return null; // No point dispatching with 0-1 workers
+  // Delegation only makes sense with someone to delegate to
+  if (getWorkerRoster().length <= 1) return null;
   if (mcpConfigPath) return mcpConfigPath;
   try {
     const config = {
@@ -499,12 +547,7 @@ export function dispatchToWorker(
   task: string,
 ): Promise<{ result: string; error?: string }> {
   return new Promise((resolve) => {
-    const state = activeClientState;
-    const seat = workerRoster.find((w) => w.seatId === seatId);
-    if (!state || state.ws.readyState !== WebSocket.OPEN) {
-      resolve({ result: "", error: "No active WebSocket client" });
-      return;
-    }
+    const seat = getWorkerRoster().find((w) => w.seatId === seatId);
     if (!seat) {
       resolve({ result: "", error: `Unknown seatId: ${seatId}` });
       return;
@@ -514,7 +557,7 @@ export function dispatchToWorker(
     const sessionKey = `subagent:dispatch:${seatId}:${runId}`;
 
     // Emit lifecycle start so frontend assigns to the target worker
-    sendEvent(state, "agent", {
+    broadcastEvent("agent", {
       runId,
       sessionKey,
       stream: "lifecycle",
@@ -526,7 +569,7 @@ export function dispatchToWorker(
     const spec = provider.buildRun({
       message: task,
       personality: buildPersonality({ seatLabel: seat.label, seatRole: seat.roleTitle }),
-      sessionId: state.sessionMap.get(seatSessionKey),
+      sessionId: dispatchSessions.get(seatSessionKey),
       // A dispatched worker does not delegate onward, so no MCP config.
       mcpConfigPath: null,
       model: process.env.AGENT_TOWN_MODEL,
@@ -545,7 +588,7 @@ export function dispatchToWorker(
     } catch (err) {
       const errMsg = `Failed to spawn ${provider.binName} for dispatch: ${(err as Error).message}`;
       log.error(errMsg);
-      sendEvent(state, "agent", {
+      broadcastEvent("agent", {
         runId,
         sessionKey,
         stream: "lifecycle",
@@ -567,7 +610,7 @@ export function dispatchToWorker(
 
     child.on("error", (err) => {
       log.error(`dispatch process error for run ${runId}:`, err.message);
-      sendEvent(state, "agent", {
+      broadcastEvent("agent", {
         runId,
         sessionKey,
         stream: "lifecycle",
@@ -580,7 +623,7 @@ export function dispatchToWorker(
       if (code !== 0) {
         const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
         log.error(`dispatch failed for run ${runId}:`, errMsg);
-        sendEvent(state, "agent", {
+        broadcastEvent("agent", {
           runId,
           sessionKey,
           stream: "lifecycle",
@@ -595,12 +638,12 @@ export function dispatchToWorker(
 
       // Store session for future resume
       if (parsed?.sessionId) {
-        state.sessionMap.set(seatSessionKey, parsed.sessionId);
+        dispatchSessions.set(seatSessionKey, parsed.sessionId);
       }
 
       if (parsed?.isError) {
         log.error(`Dispatch to ${seat.label} returned an error: ${responseText}`);
-        sendEvent(state, "agent", {
+        broadcastEvent("agent", {
           runId,
           sessionKey,
           stream: "lifecycle",
@@ -611,13 +654,13 @@ export function dispatchToWorker(
       }
 
       // Emit lifecycle end + final chat for frontend
-      sendEvent(state, "agent", {
+      broadcastEvent("agent", {
         runId,
         sessionKey,
         stream: "lifecycle",
         data: { phase: "end" },
       });
-      sendEvent(state, "chat", {
+      broadcastEvent("chat", {
         runId,
         sessionKey,
         state: "final",
@@ -635,17 +678,15 @@ export function validateDispatchSecret(secret: string): boolean {
   return secret === dispatchSecret;
 }
 
-/** Update the worker roster (called when seat configs change). */
-export function setWorkerRoster(seats: WorkerInfo[]) {
-  workerRoster = seats;
-  mcpConfigPath = null; // Force re-generation if roster changes
-  log.debug(`Worker roster updated: ${seats.length} workers`);
+/** How many workers the room currently has, for logging and tests. */
+export function workerCount(): number {
+  return getWorkerRoster().length;
 }
 
 // ── Cleanup ────────────────────────────────────────────
 
 function cleanupClient(state: ClientState) {
-  if (activeClientState === state) activeClientState = null;
+  clients.delete(state);
   for (const [runId, child] of state.runningProcesses) {
     log.info(`Killing orphaned process for run ${runId}`);
     child.kill("SIGTERM");
@@ -682,8 +723,8 @@ export function attachCliBridge(
         sessionMap: new Map(),
       };
 
-      activeClientState = state;
-      log.info("Client connected");
+      clients.add(state);
+      log.info(`Client connected (${clients.size} watching)`);
 
       // Send connect challenge immediately
       sendEvent(state, "connect.challenge", {});
