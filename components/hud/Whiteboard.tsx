@@ -143,9 +143,13 @@ export default function Whiteboard() {
 
   // ── Opening: the scene says when somebody walks up and presses E ──
   useEffect(() => {
-    // ?board=1 opens it directly, for linking someone straight to the board
-    if (new URLSearchParams(window.location.search).get("board") === "1") setOpen(true);
-    return gameEvents.on("open-whiteboard", () => setOpen(true));
+    const unsubscribe = gameEvents.on("open-whiteboard", () => setOpen(true));
+    // ?board=1 opens it directly, for linking someone straight to the board.
+    // Routed through the same event as walking up to it, so there is one way in.
+    if (new URLSearchParams(window.location.search).get("board") === "1") {
+      gameEvents.emit("open-whiteboard");
+    }
+    return unsubscribe;
   }, []);
 
   // ── Catch up with whatever is already on the board ──

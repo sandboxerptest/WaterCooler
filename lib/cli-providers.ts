@@ -233,6 +233,20 @@ function parseClaudeResult(raw: string): CliParsedResult | null {
  */
 const CLAUDE_DISPATCH_TOOL = "mcp__watercooler__dispatch_to_worker";
 
+/**
+ * The ERP tools. Headless runs deny anything not on the allowlist, so a tool
+ * that is registered but not named here fails at the moment it is needed —
+ * which reads to the model as "the data is not available".
+ */
+const ERP_TOOLS = [
+  "mcp__brightwater-erp__erp_schema",
+  "mcp__brightwater-erp__erp_query",
+  "mcp__brightwater-erp__erp_create_lead",
+  "mcp__brightwater-erp__erp_create_customer",
+  "mcp__brightwater-erp__erp_create_quote",
+  "mcp__brightwater-erp__erp_log_activity",
+];
+
 const claudeProvider: CliProvider = {
   id: "claude",
   displayName: "Claude Code",
@@ -252,11 +266,9 @@ const claudeProvider: CliProvider = {
 
     if (mcpConfigPath) {
       args.push("--mcp-config", mcpConfigPath);
-      const extra = process.env.CLAUDE_ALLOWED_TOOLS;
-      args.push(
-        "--allowedTools",
-        extra ? `${CLAUDE_DISPATCH_TOOL},${extra}` : CLAUDE_DISPATCH_TOOL,
-      );
+      const allowed = [CLAUDE_DISPATCH_TOOL, ...ERP_TOOLS];
+      if (process.env.CLAUDE_ALLOWED_TOOLS) allowed.push(process.env.CLAUDE_ALLOWED_TOOLS);
+      args.push("--allowedTools", allowed.join(","));
     } else if (process.env.CLAUDE_ALLOWED_TOOLS) {
       args.push("--allowedTools", process.env.CLAUDE_ALLOWED_TOOLS);
     }

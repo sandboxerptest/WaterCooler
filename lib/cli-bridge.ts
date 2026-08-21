@@ -310,17 +310,32 @@ function buildWorkerRosterContext(room: string, currentSeatLabel?: string): stri
  * Build the seat's persona as plain text. Providers decide where it goes —
  * a system-prompt flag where one exists, otherwise prefixed to the message.
  */
+/**
+ * What every seat is told about the company.
+ *
+ * Registering the tools is what makes them callable; this is what makes the
+ * agent think to reach for them. Without it a model asked "who owes us money"
+ * tends to apologise for having no access, while holding a tool that answers it.
+ */
+const COMPANY_BRIEFING = [
+  "You work at Brightwater Supply Co., which sells watercoolers, coffee machines and office refreshments.",
+  "The company's ERP is available to you through tools: erp_query for read-only SQL, erp_schema to see the tables.",
+  "It holds customers, contacts, suppliers, products, stock, leads, opportunities, activities, quotes, orders, invoices, payments and the general ledger.",
+  "Always look the answer up rather than estimating it, and say which figures you used.",
+  "You can also create leads, customers and quotes, and log activities, with the erp_create_* tools.",
+].join(" ");
+
 function buildPersonality(room: string, params: Record<string, unknown>): string {
   const label = params.seatLabel as string | undefined;
   const role = params.seatRole as string | undefined;
   if (!label && !role) {
-    return `You are powered by ${provider.displayName}. Stay in character when responding.`;
+    return `You are powered by ${provider.displayName}. Stay in character when responding. ${COMPANY_BRIEFING}`;
   }
   const parts: string[] = [];
   if (label) parts.push(`Your name is "${label}".`);
   if (role) parts.push(`Your role is ${role}.`);
   parts.push("Stay in character when responding.");
-  return `${parts.join(" ")}${buildWorkerRosterContext(room, label)}`;
+  return `${parts.join(" ")} ${COMPANY_BRIEFING}${buildWorkerRosterContext(room, label)}`;
 }
 
 function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
@@ -378,6 +393,9 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
         // Delegated work must land in the room that asked for it: the roster,
         // the sandbox and the spend ceiling are all per room.
         WATERCOOLER_ROOM: state.room,
+        // Stamped onto anything the agent writes, so a person can see who did it
+        WATERCOOLER_SEAT: (params.seatLabel as string | undefined) ?? "an agent",
+        ERP_DB_PATH: erpDatabasePath(),
       },
     });
   } catch (err) {
@@ -666,6 +684,24 @@ function handleMessage(state: ClientState, raw: string) {
 
 const dispatchSecret = `at_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 let mcpConfigPath: string | null = null;
+/** Whether the cached config includes delegation, so a staffing change rebuilds it. */
+let mcpConfigShape: boolean | null = null;
+
+/**
+ * Where the company's data lives, as an absolute path.
+ *
+ * Agents run inside their own sandbox, and the MCP server inherits that
+ * working directory — so a relative path resolves somewhere inside the seat's
+ * folder and the database simply is not there.
+ */
+function erpDatabasePath(): string {
+  return process.env.ERP_DB_PATH ?? join(process.cwd(), ".data", "erp.sqlite");
+}
+
+/** The ERP tool server, alongside the dispatch one. */
+function getErpServerPath(): string {
+  return join(process.cwd(), "lib", "mcp", "erp-mcp.mjs");
+}
 
 function getMcpServerPath(): string {
   // Resolve the MCP server script relative to the project root.
@@ -676,21 +712,32 @@ function getMcpServerPath(): string {
 
 /** Write (or reuse) a temporary MCP config file pointing at our stdio server. */
 function writeMcpConfig(room: string): string | null {
-  // Delegation only makes sense with someone to delegate to
-  if (getWorkerRoster(room).length <= 1) return null;
-  if (mcpConfigPath) return mcpConfigPath;
+  const canDelegate = getWorkerRoster(room).length > 1;
+  if (mcpConfigPath && mcpConfigShape === canDelegate) return mcpConfigPath;
+  mcpConfigShape = canDelegate;
   try {
     const config = {
       mcpServers: {
-        watercooler: {
+        // The company's data is always available; a seat with nobody to
+        // delegate to still needs to answer questions about customers
+        "brightwater-erp": {
           command: "node",
-          args: [getMcpServerPath()],
+          args: [getErpServerPath()],
         },
+        ...(canDelegate
+          ? {
+              watercooler: {
+                command: "node",
+                args: [getMcpServerPath()],
+              },
+            }
+          : {}),
       },
     };
     const dir = join(tmpdir(), "watercooler-mcp");
     mkdirSync(dir, { recursive: true });
-    const filePath = join(dir, `mcp-config-${process.pid}.json`);
+    // Two shapes, so a room that gains a second worker gets a fresh config
+    const filePath = join(dir, `mcp-config-${process.pid}-${canDelegate ? "team" : "solo"}.json`);
     writeFileSync(filePath, JSON.stringify(config), "utf-8");
     mcpConfigPath = filePath;
     log.info(`MCP config written to ${filePath}`);
@@ -772,7 +819,11 @@ export function dispatchToWorker(
       child = spawn(spec.bin, spec.args, {
         stdio: ["ignore", "pipe", "pipe"],
         cwd: spec.cwd,
-        env: { ...process.env },
+        env: {
+          ...process.env,
+          WATERCOOLER_SEAT: seat.label,
+          ERP_DB_PATH: erpDatabasePath(),
+        },
       });
     } catch (err) {
       runningCount = Math.max(0, runningCount - 1);
