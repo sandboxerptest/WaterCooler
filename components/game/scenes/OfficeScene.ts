@@ -199,6 +199,12 @@ export class OfficeScene extends Phaser.Scene {
     this.gamepad = new GamepadInput(this);
     this.remotePlayers = new RemotePlayerManager(this);
 
+    // Surface the controller in the HUD: without it, "is it even detected?"
+    // is unanswerable from inside the game
+    this.gamepad.onConnected = (id, layout) => {
+      gameEvents.emit("gamepad-state", id, layout);
+    };
+
     const unsubPresence = gameEvents.on("presence-updated", (players) => {
       this.remotePlayers.sync(players);
     });

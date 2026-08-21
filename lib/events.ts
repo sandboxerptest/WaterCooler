@@ -27,6 +27,8 @@ export interface GameEventMap {
   "presence-count": [count: number, capacity: number];
   /** What the room has spent on agents, and the ceiling it stops at. */
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
+  /** A controller appeared or went away, with its layout for prompts. */
+  "gamepad-state": [id: string | null, layout: string];
   /** Somebody walked up to a board and pressed E. */
   "open-whiteboard": [];
   /** The board was closed, so the office takes input again. */

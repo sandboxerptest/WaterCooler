@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   EdgeTracker,
+  selectPad,
   PAD_BUTTON,
   buttonsForAction,
   confirmLabel,
@@ -127,5 +128,44 @@ describe("action mapping", () => {
   it("cycles panels with the shoulder buttons", () => {
     expect(buttonsForAction("panelPrev")).toEqual([PAD_BUTTON.LB]);
     expect(buttonsForAction("panelNext")).toEqual([PAD_BUTTON.RB]);
+  });
+});
+
+describe("selectPad", () => {
+  const pad = (over = {}) => ({
+    id: "Xbox Wireless Controller",
+    connected: true,
+    axes: [0, 0],
+    buttons: [{ pressed: false }],
+    ...over,
+  });
+
+  it("finds a connected controller", () => {
+    expect(selectPad([pad()])?.id).toBe("Xbox Wireless Controller");
+  });
+
+  it("skips the empty slots the browser pads the list with", () => {
+    // navigator.getGamepads() returns a fixed-length array full of nulls
+    expect(selectPad([null, null, pad(), null])?.id).toBe("Xbox Wireless Controller");
+  });
+
+  it("ignores a disconnected entry", () => {
+    expect(selectPad([pad({ connected: false })])).toBeNull();
+  });
+
+  it("ignores an entry with no buttons, which is not a usable pad", () => {
+    expect(selectPad([pad({ buttons: [] })])).toBeNull();
+  });
+
+  it("returns null when nothing is plugged in", () => {
+    expect(selectPad([null, null, null, null])).toBeNull();
+  });
+
+  it("finds a pad that was already connected before the page loaded", () => {
+    // The original bug: Phaser only counts pads whose "connected" event it saw,
+    // so a controller plugged in beforehand stayed invisible. Reading the list
+    // directly does not care when it arrived.
+    const alreadyThere = [pad({ id: "Xbox Wireless Controller (STANDARD GAMEPAD)" })];
+    expect(selectPad(alreadyThere)).not.toBeNull();
   });
 });

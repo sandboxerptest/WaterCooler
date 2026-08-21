@@ -144,16 +144,65 @@ export function buttonsForAction(action: PadAction): number[] {
  * when no gamepad is attached or the plugin is disabled — everything reports
  * "nothing pressed".
  */
+/** The slice of the browser Gamepad API this needs. */
+export interface RawPad {
+  id: string;
+  connected: boolean;
+  axes: readonly number[];
+  buttons: readonly { pressed: boolean }[];
+}
+
+/**
+ * Pick a pad from what the browser reports.
+ *
+ * Chrome only fires `gamepadconnected` on the first input *after* a page has
+ * focus, so a controller plugged in before load is invisible to anything that
+ * waits for the event — which is why this polls the list directly instead.
+ */
+export function selectPad(pads: readonly (RawPad | null)[]): RawPad | null {
+  for (const pad of pads) {
+    if (pad?.connected && pad.buttons.length > 0) return pad;
+  }
+  return null;
+}
+
 export class GamepadInput {
   private scene: Phaser.Scene;
   private edges = new EdgeTracker();
-  private pad: Phaser.Input.Gamepad.Gamepad | null = null;
+  private pad: RawPad | null = null;
   private prevStickDir: -1 | 0 | 1 = 0;
   private stickEdge: -1 | 0 | 1 = 0;
   layout: PadLayout = "xbox";
 
+  /** Told when a pad appears or disappears, so the HUD can show it. */
+  onConnected: ((id: string | null, layout: PadLayout) => void) | null = null;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+  }
+
+  /**
+   * Read the pad from the browser, falling back to Phaser's plugin.
+   *
+   * Phaser only counts pads it saw connect, so relying on it alone means a
+   * controller that was already plugged in never registers.
+   */
+  private readPad(): RawPad | null {
+    if (typeof navigator !== "undefined" && typeof navigator.getGamepads === "function") {
+      const direct = selectPad(navigator.getGamepads() as unknown as (RawPad | null)[]);
+      if (direct) return direct;
+    }
+
+    const plugin = this.scene.input.gamepad;
+    const fallback = plugin?.total ? plugin.getPad(0) : null;
+    if (!fallback) return null;
+
+    return {
+      id: fallback.id,
+      connected: true,
+      axes: fallback.axes.map((axis) => axis.getValue()),
+      buttons: fallback.buttons.map((button) => ({ pressed: button.pressed })),
+    };
   }
 
   get connected(): boolean {
@@ -162,13 +211,19 @@ export class GamepadInput {
 
   /** Call once per frame, before reading movement or actions. */
   poll() {
-    const plugin = this.scene.input.gamepad;
-    const pad = plugin?.total ? plugin.getPad(0) : null;
+    const pad = this.readPad();
 
-    if (pad !== this.pad) {
+    if (pad?.id !== this.pad?.id) {
       this.edges.reset();
-      this.pad = pad ?? null;
-      if (pad) this.layout = detectPadLayout(pad.id);
+      this.pad = pad;
+      if (pad) {
+        this.layout = detectPadLayout(pad.id);
+        this.onConnected?.(pad.id, this.layout);
+      } else {
+        this.onConnected?.(null, this.layout);
+      }
+    } else {
+      this.pad = pad;
     }
 
     if (!pad) {
@@ -197,8 +252,8 @@ export class GamepadInput {
 
     return padVelocity(
       {
-        axisX: pad.axes[0]?.getValue() ?? 0,
-        axisY: pad.axes[1]?.getValue() ?? 0,
+        axisX: pad.axes[0] ?? 0,
+        axisY: pad.axes[1] ?? 0,
         left: this.edges.isDown(PAD_BUTTON.DPAD_LEFT),
         right: this.edges.isDown(PAD_BUTTON.DPAD_RIGHT),
         up: this.edges.isDown(PAD_BUTTON.DPAD_UP),
@@ -212,8 +267,8 @@ export class GamepadInput {
     return buttonsForAction(action).some((b) => this.edges.justPressed(b));
   }
 
-  private stickDirection(pad: Phaser.Input.Gamepad.Gamepad): -1 | 0 | 1 {
-    const y = pad.axes[1]?.getValue() ?? 0;
+  private stickDirection(pad: RawPad): -1 | 0 | 1 {
+    const y = pad.axes[1] ?? 0;
     if (y < -0.6) return -1;
     if (y > 0.6) return 1;
     return 0;

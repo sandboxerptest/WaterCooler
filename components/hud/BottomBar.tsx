@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleDollarSign, Sparkles, User, Users } from "lucide-react";
+import { CircleDollarSign, Gamepad2, Sparkles, User, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
@@ -30,6 +30,14 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
   useEffect(() => {
     return gameEvents.on("budget-updated", (spentUsd, limitUsd, halted) => {
       setBudget({ spent: spentUsd, limit: limitUsd, halted });
+    });
+  }, []);
+
+  const [pad, setPad] = useState<{ id: string; layout: string } | null>(null);
+
+  useEffect(() => {
+    return gameEvents.on("gamepad-state", (id, layout) => {
+      setPad(id ? { id, layout } : null);
     });
   }, []);
 
@@ -76,6 +84,12 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
           <span>
             {humans.count}/{humans.capacity} here
           </span>
+        </div>
+      )}
+      {pad && (
+        <div className="hud-pill hud-pill--metric" title={pad.id}>
+          <Gamepad2 size={10} />
+          <span>{pad.layout}</span>
         </div>
       )}
       {budget && (
