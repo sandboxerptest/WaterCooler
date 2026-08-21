@@ -20,6 +20,7 @@ import { ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
 import { onRunCompleted, type CompletedRun } from "./server/achievement-rules";
 import { humansInRoom } from "./server/presence-socket";
 import { achievementFor } from "./achievements";
+import { CURRENCY_NOTE } from "./erp/currency";
 import { DEFAULT_ROOM_SLUG, normaliseRoomSlug } from "./rooms";
 import {
   ensureSeatWorkspace,
@@ -321,6 +322,7 @@ const COMPANY_BRIEFING = [
   "You work at Brightwater Supply Co., which sells watercoolers, coffee machines and office refreshments.",
   "The company's ERP is available to you through tools: erp_query for read-only SQL, erp_schema to see the tables.",
   "It holds customers, contacts, suppliers, products, stock, leads, opportunities, activities, quotes, orders, invoices, payments and the general ledger.",
+  CURRENCY_NOTE,
   "Always look the answer up rather than estimating it, and say which figures you used.",
   "You can also create leads, customers and quotes, and log activities, with the erp_create_* tools.",
 ].join(" ");

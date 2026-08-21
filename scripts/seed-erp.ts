@@ -6,6 +6,7 @@
  */
 
 import { ERP_DB_PATH, isEmpty, openErpDb, seedErpDatabase } from "../lib/erp/db";
+import { formatMoney } from "../lib/erp/currency";
 
 const force = process.argv.includes("--force");
 
@@ -34,6 +35,6 @@ for (const [table, count] of Object.entries(counts)) {
   console.log(`  ${table.padEnd(18)} ${count}`);
 }
 console.log(
-  `\n  ${rows.overdue} overdue invoices · £${rows.owed} outstanding · £${rows.revenue} lifetime revenue`,
+  `\n  ${rows.overdue} overdue invoices · ${formatMoney(rows.owed)} outstanding · ${formatMoney(rows.revenue)} lifetime revenue`,
 );
 db.close();
