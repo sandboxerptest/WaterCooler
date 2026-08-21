@@ -37,6 +37,11 @@ export interface GameEventMap {
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
   /** A controller appeared or went away, with its layout for prompts. */
   "gamepad-state": [id: string | null, layout: string];
+  /**
+   * The on-screen action button, which stands in for the E key. A phone has
+   * no keyboard, and walking up to something is only half of using it.
+   */
+  "interact-pressed": [];
   /** Somebody walked up to the water bucket and pressed E. */
   "open-pingpong": [];
   /** The ping pong table was closed, so the office takes input again. */

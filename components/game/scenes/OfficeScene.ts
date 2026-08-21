@@ -27,6 +27,7 @@ import {
 import { CameraController } from "../systems/CameraController";
 import { WorkerManager } from "../systems/WorkerManager";
 import { InteractionManager } from "../systems/InteractionManager";
+import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { RemotePlayerManager } from "../systems/RemotePlayerManager";
 import { DoorManager } from "../systems/DoorManager";
@@ -50,6 +51,11 @@ export class OfficeScene extends Phaser.Scene {
   private cauldronZone: { x: number; y: number } | null = null;
   private cauldronPrompt: Phaser.GameObjects.Text | null = null;
   private pinballOpen = false;
+  private navigator = new TapNavigator();
+  private pathfinder: Pathfinder | null = null;
+  private walkMarker: Phaser.GameObjects.Arc | null = null;
+  /** Set for one frame when something asks for an interaction without a key. */
+  private virtualInteract = false;
   private bucketZone: { x: number; y: number } | null = null;
   private bucketPrompt: Phaser.GameObjects.Text | null = null;
   private pingPongOpen = false;
@@ -165,6 +171,8 @@ export class OfficeScene extends Phaser.Scene {
       PF_PADDING,
     );
 
+    this.pathfinder = pathfinder;
+
     const { bossSpawn, workerSpawns } = parseSpawns(map);
     const pois = parsePOIs(map);
 
@@ -189,6 +197,7 @@ export class OfficeScene extends Phaser.Scene {
     this.player.sprite.setCollideWorldBounds(true);
 
     this.input.keyboard?.disableGlobalCapture();
+    this.initTapToWalk();
 
     // ── Systems ───────────────────────────────────────────
     this.cameraController = new CameraController(
@@ -241,6 +250,10 @@ export class OfficeScene extends Phaser.Scene {
       this.pinballOpen = true;
     });
 
+    const unsubInteract = gameEvents.on("interact-pressed", () => {
+      this.virtualInteract = true;
+    });
+
     const unsubPongOpen = gameEvents.on("open-pingpong", () => {
       this.pingPongOpen = true;
     });
@@ -281,6 +294,7 @@ export class OfficeScene extends Phaser.Scene {
       unsubPinballClosed();
       unsubPongOpen();
       unsubPongClosed();
+      unsubInteract();
     };
     this.initBossSeat(bossSpawn);
 
@@ -362,6 +376,81 @@ export class OfficeScene extends Phaser.Scene {
 
   // ── Update ─────────────────────────────────────────────
 
+  /** A tap or the on-screen button standing in for the E key, once. */
+  private takeVirtualInteract(): boolean {
+    if (!this.virtualInteract) return false;
+    this.virtualInteract = false;
+    return true;
+  }
+
+  // ── Tapping the floor ──────────────────────────────────
+
+  /**
+   * Walk to where the player tapped, and do whatever is there when we arrive.
+   *
+   * A tap has to be told apart from dragging the camera, which uses the same
+   * pointer: anything that wandered or was held is a drag. On a phone this is
+   * the only way to move at all, and on a desktop it sits happily alongside
+   * the keys — either takes over from the other.
+   */
+  private initTapToWalk() {
+    let down: { x: number; y: number; at: number } | null = null;
+
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      down = { x: pointer.x, y: pointer.y, at: pointer.downTime };
+    });
+
+    this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      const start = down;
+      down = null;
+      if (!start) return;
+      if (!isTap(start, { x: pointer.x, y: pointer.y, at: pointer.upTime })) return;
+
+      // Anything with a panel over the office is driving its own input
+      if (this.terminalOpen || this.whiteboardOpen || this.pinballOpen || this.pingPongOpen) return;
+      if (this.interactionManager.interactionMenu.visible) return;
+
+      const world = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
+      this.walkTo(world.x, world.y);
+    });
+
+    // The office is somewhere you tap, so a long press must not offer to
+    // select the canvas or hand the phone's own menu instead
+    this.game.canvas.style.touchAction = "none";
+    this.game.canvas.oncontextmenu = (event) => event.preventDefault();
+  }
+
+  /** Route to a point and walk it, acting on whatever is there on arrival. */
+  private walkTo(x: number, y: number) {
+    if (!this.pathfinder) return;
+
+    const path = this.pathfinder.findPath(this.player.sprite.x, this.player.sprite.y, x, y);
+    if (!path || path.length === 0) return;
+
+    // Whatever is at the end gets the same treatment as pressing E there,
+    // so tapping a desk, the cauldron or a board does the obvious thing
+    this.navigator.follow(path, () => {
+      this.virtualInteract = true;
+    });
+    this.showWalkMarker(path[path.length - 1]);
+    this.cameraController.resumeCameraFollow();
+  }
+
+  private showWalkMarker(at: { x: number; y: number }) {
+    this.walkMarker?.destroy();
+    this.walkMarker = this.add.circle(at.x, at.y, 6, 0xc9a227, 0.9).setDepth(5);
+    this.tweens.add({
+      targets: this.walkMarker,
+      alpha: 0,
+      scale: 2,
+      duration: 550,
+      onComplete: () => {
+        this.walkMarker?.destroy();
+        this.walkMarker = null;
+      },
+    });
+  }
+
   /**
    * Send the open dialog somewhere to put its focus ring.
    *
@@ -441,7 +530,23 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    this.player.update(this.gamepad.velocity(MOVE_SPEED));
+    // A key or a stick means the player has taken over, and the tap they
+    // made a moment ago is no longer what they want
+    const padVelocity = this.gamepad.velocity(MOVE_SPEED);
+    const steering = this.navigator.active
+      ? this.navigator.step({ x: this.player.sprite.x, y: this.player.sprite.y }, MOVE_SPEED)
+      : null;
+
+    if (
+      this.navigator.active &&
+      (this.player.hasKeyboardInput() || padVelocity.vx || padVelocity.vy)
+    ) {
+      this.navigator.cancel();
+      this.walkMarker?.destroy();
+      this.walkMarker = null;
+    }
+
+    this.player.update(steering ?? padVelocity);
 
     gameEvents.emit("player-moved", {
       x: this.player.sprite.x,
@@ -457,7 +562,9 @@ export class OfficeScene extends Phaser.Scene {
 
     // Worker proximity: E on the keyboard, or confirm on the pad
     const interactPressed =
-      Phaser.Input.Keyboard.JustDown(this.eKey) || this.gamepad.justPressed("interact");
+      Phaser.Input.Keyboard.JustDown(this.eKey) ||
+      this.gamepad.justPressed("interact") ||
+      this.takeVirtualInteract();
 
     if (this.interactionManager.updateProximity(interactPressed)) {
       return;

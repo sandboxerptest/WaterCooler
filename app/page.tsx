@@ -19,6 +19,13 @@ const PhaserGame = dynamic(() => import("@/components/game/PhaserGame"), {
 /** The stored width is a client-only fact, so the server must not read it. */
 const subscribeToNothing = () => () => {};
 
+/**
+ * Below this the column is a drawer over the office rather than a column
+ * beside it — and a drawer has no business being open before it is asked for.
+ */
+const SIDEBAR_FITS_AT = 900;
+const readWideEnough = () => window.innerWidth >= SIDEBAR_FITS_AT;
+
 export default function Page() {
   const storedWidth = useSyncExternalStore(
     subscribeToNothing,
@@ -26,9 +33,12 @@ export default function Page() {
     () => SIDEBAR_DEFAULT_WIDTH,
   );
   const [width, setWidth] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  /** Null until the reader says otherwise; the screen decides to begin with. */
+  const [sidebarChoice, setSidebarChoice] = useState<boolean | null>(null);
+  const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
+  const sidebarOpen = sidebarChoice ?? wideEnough;
 
-  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
+  const toggleSidebar = useCallback(() => setSidebarChoice(!sidebarOpen), [sidebarOpen]);
 
   return (
     <ErrorBoundary>
@@ -50,7 +60,7 @@ export default function Page() {
             open={sidebarOpen}
             width={width ?? storedWidth}
             onWidthChange={setWidth}
-            onClose={() => setSidebarOpen(false)}
+            onClose={() => setSidebarChoice(false)}
           />
 
           <TerminalModal />

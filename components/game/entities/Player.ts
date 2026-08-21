@@ -96,6 +96,25 @@ export class Player {
   }
 
   /**
+   * True while the player is working the keys themselves.
+   *
+   * Anything walking the character somewhere — a tap on the floor — gives way
+   * to this: taking hold of the keys means taking over.
+   */
+  hasKeyboardInput(): boolean {
+    return (
+      this.cursors.left.isDown ||
+      this.cursors.right.isDown ||
+      this.cursors.up.isDown ||
+      this.cursors.down.isDown ||
+      this.wasd.A.isDown ||
+      this.wasd.D.isDown ||
+      this.wasd.W.isDown ||
+      this.wasd.S.isDown
+    );
+  }
+
+  /**
    * @param padVelocity movement from a connected gamepad; used when the
    * keyboard is idle, so either input can drive the player at any time.
    */

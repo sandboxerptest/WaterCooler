@@ -1489,3 +1489,36 @@
   display: flex;
   gap: 8px;
 }
+
+/* ── The action button, on touch screens only ──────────── */
+.touch-action-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 96px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 3px solid var(--pixel-accent);
+  background: rgba(37, 34, 25, 0.9);
+  color: var(--pixel-accent);
+  font-family: var(--pixel-font);
+  font-size: 18px;
+  z-index: 25;
+  /* The HUD layer passes pointer events through to the office; this catches
+     its own, and takes no part in scrolling or double-tap zoom */
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-action-btn:active {
+  background: var(--pixel-accent);
+  color: #1a1814;
+}
+
+/* Out of the way of the drawer when the chat column is over the office */
+@media (max-width: 900px) {
+  .touch-action-btn {
+    bottom: 110px;
+  }
+}

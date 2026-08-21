@@ -23,6 +23,7 @@ import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
 import Pinball from "./Pinball";
 import PingPong from "./PingPong";
+import TouchControls from "./TouchControls";
 
 interface GameHudProps {
   sidebarOpen: boolean;
@@ -156,6 +157,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
       <Whiteboard />
       <Pinball />
       <PingPong />
+      <TouchControls />
       {/* Top area: logo | agent pills | tool buttons */}
       <TopBar
         seats={state.seats}
