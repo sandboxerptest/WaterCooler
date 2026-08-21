@@ -398,6 +398,15 @@ export class OfficeScene extends Phaser.Scene {
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       down = { x: pointer.x, y: pointer.y, at: pointer.downTime };
+
+      // Touching the office means you have finished typing. A canvas cannot
+      // hold focus of its own, so without this the chat box keeps it — and
+      // the scene stands down entirely while a text field is focused, which
+      // would leave the character unable to move by any means at all.
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused && (focused.tagName === "TEXTAREA" || focused.tagName === "INPUT")) {
+        focused.blur();
+      }
     });
 
     this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
