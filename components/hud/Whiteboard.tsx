@@ -143,6 +143,8 @@ export default function Whiteboard() {
 
   // ── Opening: the scene says when somebody walks up and presses E ──
   useEffect(() => {
+    // ?board=1 opens it directly, for linking someone straight to the board
+    if (new URLSearchParams(window.location.search).get("board") === "1") setOpen(true);
     return gameEvents.on("open-whiteboard", () => setOpen(true));
   }, []);
 
@@ -293,16 +295,41 @@ export default function Whiteboard() {
         position: "absolute",
         inset: 0,
         background: "rgba(0,0,0,0.78)",
-        display: "grid",
-        placeItems: "center",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         zIndex: 45,
-        padding: 20,
+        padding: 12,
+        // The HUD layer is pointer-events: none so the game can be clicked
+        // through it; anything interactive has to opt back in.
+        pointerEvents: "auto",
       }}
       role="dialog"
       aria-label="Office whiteboard"
+      onPointerDown={(event) => {
+        // Clicking the dimmed surround closes, so the board is never a trap
+        if (event.target === event.currentTarget) close();
+      }}
     >
-      <div style={{ display: "grid", gap: 8, width: "min(96vw, 1500px)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          width: "min(94vw, 1200px)",
+          maxHeight: "100%",
+          minHeight: 0,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+            flexShrink: 0,
+          }}
+        >
           <span style={{ fontSize: "10px", marginRight: "auto" }}>WHITEBOARD</span>
 
           {TOOLS.map(({ tool: option, label, Icon }) => (
@@ -392,31 +419,50 @@ export default function Whiteboard() {
           </button>
         </div>
 
-        <canvas
-          ref={canvasRef}
-          width={BOARD_WIDTH}
-          height={BOARD_HEIGHT}
-          onPointerDown={startStroke}
-          onPointerMove={extendStroke}
-          onPointerUp={finishStroke}
-          onPointerCancel={finishStroke}
-          onPointerLeave={finishStroke}
+        {/* Shrinks to fit both the width and the height available, so the
+            toolbar and the close button are always reachable */}
+        <div
           style={{
-            width: "100%",
-            height: "auto",
-            aspectRatio: `${BOARD_WIDTH} / ${BOARD_HEIGHT}`,
-            background: BOARD_BACKGROUND,
-            border: "3px solid var(--pixel-border, #5b4636)",
-            borderRadius: 4,
-            cursor: "crosshair",
-            touchAction: "none",
+            flex: 1,
+            minHeight: 0,
+            display: "grid",
+            placeItems: "center",
           }}
-        />
+        >
+          <canvas
+            ref={canvasRef}
+            width={BOARD_WIDTH}
+            height={BOARD_HEIGHT}
+            onPointerDown={startStroke}
+            onPointerMove={extendStroke}
+            onPointerUp={finishStroke}
+            onPointerCancel={finishStroke}
+            style={{
+              aspectRatio: `${BOARD_WIDTH} / ${BOARD_HEIGHT}`,
+              maxWidth: "100%",
+              maxHeight: "100%",
+              width: "auto",
+              height: "auto",
+              background: BOARD_BACKGROUND,
+              border: "3px solid var(--pixel-border, #5b4636)",
+              borderRadius: 4,
+              cursor: "crosshair",
+              touchAction: "none",
+            }}
+          />
+        </div>
 
-        <div style={{ fontSize: "8px", color: "var(--pixel-muted)", textAlign: "center" }}>
+        <div
+          style={{
+            fontSize: "8px",
+            color: "var(--pixel-muted)",
+            textAlign: "center",
+            flexShrink: 0,
+          }}
+        >
           {clearedBy
             ? `${clearedBy} cleared the board`
-            : "Everyone in this room sees what you draw · Esc to close"}
+            : "Everyone in this room sees what you draw · Esc or click outside to close"}
         </div>
       </div>
     </div>

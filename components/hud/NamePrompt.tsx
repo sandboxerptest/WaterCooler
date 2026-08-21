@@ -41,6 +41,8 @@ export default function NamePrompt() {
         placeItems: "center",
         background: "rgba(0,0,0,0.72)",
         zIndex: 40,
+        // The HUD layer does not take pointer events; dialogs must opt in
+        pointerEvents: "auto",
       }}
       role="dialog"
       aria-label="Choose a display name"
