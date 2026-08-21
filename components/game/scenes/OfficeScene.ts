@@ -43,6 +43,10 @@ export class OfficeScene extends Phaser.Scene {
   private player!: Player;
   private terminalZone: { x: number; y: number } | null = null;
   private promptText: Phaser.GameObjects.Text | null = null;
+  /** Boards you can walk up to and draw on. */
+  private boardZones: Array<{ x: number; y: number }> = [];
+  private boardPrompt: Phaser.GameObjects.Text | null = null;
+  private whiteboardOpen = false;
   private eKey!: Phaser.Input.Keyboard.Key;
   private gamepad!: GamepadInput;
   private remotePlayers!: RemotePlayerManager;
@@ -156,6 +160,11 @@ export class OfficeScene extends Phaser.Scene {
     const { bossSpawn, workerSpawns } = parseSpawns(map);
     const pois = parsePOIs(map);
 
+    // Any board in the office opens the same shared canvas
+    this.boardZones = pois
+      .filter((poi) => /white ?board|black ?board|chalk ?board/i.test(poi.name))
+      .map((poi) => ({ x: poi.x, y: poi.y }));
+
     this.player = new Player(this, bossSpawn.x, bossSpawn.y, bossSpawn.facing);
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
@@ -202,6 +211,9 @@ export class OfficeScene extends Phaser.Scene {
     const unsubSelfSaid = gameEvents.on("self-said", (text) => {
       this.player?.say(text);
     });
+    const unsubBoardClosed = gameEvents.on("whiteboard-closed", () => {
+      this.whiteboardOpen = false;
+    });
     const unsubBadge = gameEvents.on("achievement-earned", (achievement) => {
       // Agents celebrate at their desk; people celebrate wherever they stand
       if (achievement.subjectType === "agent") {
@@ -217,6 +229,7 @@ export class OfficeScene extends Phaser.Scene {
       unsubSaid();
       unsubSelfSaid();
       unsubBadge();
+      unsubBoardClosed();
     };
     this.initBossSeat(bossSpawn);
 
@@ -252,6 +265,14 @@ export class OfficeScene extends Phaser.Scene {
       .setDepth(20)
       .setVisible(false);
     this.promptText.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+
+    this.boardPrompt = this.add
+      .text(0, 0, "Press E to draw", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
+      .setResolution(window.devicePixelRatio * 2)
+      .setOrigin(0.5, 1)
+      .setDepth(20)
+      .setVisible(false);
+    this.boardPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
 
     const kb = this.input.keyboard;
     if (!kb) return;
@@ -293,7 +314,7 @@ export class OfficeScene extends Phaser.Scene {
     if (this.gamepad.justPressed("panelNext")) gameEvents.emit("hud-cycle-panel", 1);
     if (this.gamepad.justPressed("panelClose")) gameEvents.emit("hud-close-panel");
 
-    if (this.terminalOpen || isInputFocused()) {
+    if (this.terminalOpen || this.whiteboardOpen || isInputFocused()) {
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
       return;
@@ -318,6 +339,34 @@ export class OfficeScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.eKey) || this.gamepad.justPressed("interact");
 
     if (this.interactionManager.updateProximity(interactPressed)) {
+      return;
+    }
+
+    // Whiteboards: walk up, press E, draw
+    const nearestBoard = this.boardZones
+      .map((zone) => ({
+        zone,
+        distance: Phaser.Math.Distance.Between(
+          this.player.sprite.x,
+          this.player.sprite.y,
+          zone.x,
+          zone.y,
+        ),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0];
+
+    const atBoard = !!nearestBoard && nearestBoard.distance < BOSS_INTERACT_DISTANCE;
+    if (this.boardPrompt) {
+      this.boardPrompt.setVisible(atBoard && !this.whiteboardOpen);
+      if (atBoard) {
+        this.boardPrompt.setPosition(nearestBoard.zone.x, nearestBoard.zone.y - 8);
+      }
+    }
+
+    if (atBoard && interactPressed) {
+      this.whiteboardOpen = true;
+      this.boardPrompt?.setVisible(false);
+      gameEvents.emit("open-whiteboard");
       return;
     }
 

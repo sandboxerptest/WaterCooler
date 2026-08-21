@@ -21,6 +21,7 @@ import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
 import NamePrompt from "./NamePrompt";
 import AchievementToast from "./AchievementToast";
+import Whiteboard from "./Whiteboard";
 
 export default function GameHud() {
   const { state } = useStudio();
@@ -146,6 +147,7 @@ export default function GameHud() {
     <div className="hud-overlay">
       <NamePrompt />
       <AchievementToast />
+      <Whiteboard />
       {/* Top area: logo | agent pills | tool buttons */}
       <TopBar
         seats={state.seats}

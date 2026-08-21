@@ -27,6 +27,10 @@ export interface GameEventMap {
   "presence-count": [count: number, capacity: number];
   /** What the room has spent on agents, and the ceiling it stops at. */
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
+  /** Somebody walked up to a board and pressed E. */
+  "open-whiteboard": [];
+  /** The board was closed, so the office takes input again. */
+  "whiteboard-closed": [];
   /** A badge was just earned, by a person or an agent. */
   "achievement-earned": [
     achievement: {

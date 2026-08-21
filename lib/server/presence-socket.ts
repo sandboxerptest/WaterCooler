@@ -17,6 +17,7 @@ import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
 import { normaliseRoomSlug } from "../rooms";
 import { achievementFor, type EarnedAchievement } from "../achievements";
+import { isStroke, sanitiseStroke } from "../whiteboard";
 import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
 import { createLogger } from "../logger";
 import {
@@ -351,6 +352,29 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (!slug) return;
         const room = rooms.get(slug);
         if (!room?.hub.has(id)) return;
+
+        if (parsed.type === "board") {
+          const player = room.hub.snapshot().find((p) => p.id === id);
+
+          if (parsed.action === "clear") {
+            getRoomStore().clearBoard(slug);
+            log.info(`${player?.name ?? "someone"} cleared the board in "${slug}"`);
+            // Everyone including the author, so a wipe is unambiguous
+            broadcast(slug, { type: "board", action: "clear", by: player?.name });
+            return;
+          }
+
+          if (!isStroke(parsed.stroke)) return;
+          const stroke = sanitiseStroke({ ...parsed.stroke, author: player?.name });
+          getRoomStore().addStroke(slug, stroke.id, stroke);
+          // The author already drew it locally; echoing would double the ink
+          broadcast(
+            slug,
+            { type: "board", action: "draw", stroke, done: parsed.done === true, by: player?.name },
+            id,
+          );
+          return;
+        }
 
         if (parsed.type === "say") {
           const text = typeof parsed.text === "string" ? parsed.text.trim().slice(0, 500) : "";

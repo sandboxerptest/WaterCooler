@@ -34,6 +34,9 @@ const DB_PATH = process.env.ROOM_DB_PATH ?? join(process.cwd(), ".data", "waterc
  */
 export const ROOM_SPEND_LIMIT_USD = Number(process.env.ROOM_SPEND_LIMIT_USD ?? 50);
 
+/** How many strokes one board keeps before the oldest are dropped. */
+const BOARD_STROKE_LIMIT = 2000;
+
 /** Mirrors the client-side caps so the server cannot grow without bound. */
 export const LIMITS = {
   tasks: 200,
@@ -118,6 +121,15 @@ CREATE TABLE IF NOT EXISTS achievements (
   PRIMARY KEY (room, subject_type, subject_id, code)
 );
 
+CREATE TABLE IF NOT EXISTS board_strokes (
+  room       TEXT NOT NULL,
+  stroke_id  TEXT NOT NULL,
+  position   INTEGER NOT NULL,
+  data       TEXT NOT NULL,
+  PRIMARY KEY (room, stroke_id)
+);
+
+CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
 CREATE INDEX IF NOT EXISTS tasks_by_room ON tasks (room, position);
 CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
 CREATE INDEX IF NOT EXISTS sessions_by_room ON sessions (room, position);
@@ -169,6 +181,54 @@ export class RoomStore {
         // Already present, which is the common case
       }
     }
+  }
+
+  // ── Whiteboard ────────────────────────────────────────
+
+  /**
+   * Add or update a stroke. Updates matter: a stroke is streamed while it is
+   * being drawn, so the same id arrives repeatedly with more points, and a
+   * refresh mid-drawing should show what has been drawn so far.
+   */
+  addStroke(room: string, strokeId: string, data: unknown) {
+    this.ensureRoom(room);
+    const row = this.db
+      .prepare("SELECT MAX(position) AS edge FROM board_strokes WHERE room = ?")
+      .get(room) as { edge: number | null };
+
+    this.db
+      .prepare(
+        `INSERT INTO board_strokes (room, stroke_id, position, data) VALUES (?, ?, ?, ?)
+         ON CONFLICT (room, stroke_id) DO UPDATE SET data = excluded.data`,
+      )
+      .run(room, strokeId, (row?.edge ?? 0) + 1, JSON.stringify(data));
+
+    this.trimStrokes(room);
+  }
+
+  listStrokes(room: string): unknown[] {
+    this.ensureRoom(room);
+    return parseRows(
+      this.db
+        .prepare("SELECT data FROM board_strokes WHERE room = ? ORDER BY position")
+        .all(room) as DataRow[],
+    );
+  }
+
+  clearBoard(room: string) {
+    this.ensureRoom(room);
+    this.db.prepare("DELETE FROM board_strokes WHERE room = ?").run(room);
+  }
+
+  private trimStrokes(room: string) {
+    this.db
+      .prepare(
+        `DELETE FROM board_strokes WHERE room = ? AND stroke_id IN (
+           SELECT stroke_id FROM board_strokes WHERE room = ?
+           ORDER BY position DESC LIMIT -1 OFFSET ?
+         )`,
+      )
+      .run(room, room, BOARD_STROKE_LIMIT);
   }
 
   // ── Achievements ──────────────────────────────────────

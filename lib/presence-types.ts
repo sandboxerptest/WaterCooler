@@ -89,7 +89,16 @@ export interface SayMessage {
   scope: SayScope;
 }
 
-export type ClientMessage = JoinMessage | MoveMessage | WorldMessage | SayMessage;
+/** A mark added to the room's whiteboard, or a request to wipe it. */
+export interface BoardMessage {
+  type: "board";
+  action: "draw" | "clear";
+  stroke?: unknown;
+  /** False while the pen is still moving, true when it is lifted. */
+  done?: boolean;
+}
+
+export type ClientMessage = JoinMessage | MoveMessage | WorldMessage | SayMessage | BoardMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -161,6 +170,14 @@ export interface SaidMessage {
   scope: SayScope;
 }
 
+export interface BoardBroadcast {
+  type: "board";
+  action: "draw" | "clear";
+  stroke?: unknown;
+  done?: boolean;
+  by?: string;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | RejectedMessage
@@ -170,12 +187,15 @@ export type ServerMessage =
   | WorldBroadcast
   | BudgetMessage
   | SaidMessage
-  | AchievementMessage;
+  | AchievementMessage
+  | BoardBroadcast;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;
   const type = (value as { type?: unknown }).type;
-  return type === "join" || type === "move" || type === "world" || type === "say";
+  return (
+    type === "join" || type === "move" || type === "world" || type === "say" || type === "board"
+  );
 }
 
 const WORLD_ENTITIES = ["task", "message", "seat", "session"] as const;
