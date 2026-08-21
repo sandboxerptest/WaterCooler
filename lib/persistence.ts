@@ -14,6 +14,10 @@ import {
   LS_BGM_VOLUME,
   LS_PLAYER_NAME,
   LS_ONBOARDING_DONE,
+  LS_SIDEBAR_WIDTH,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
   DEFAULT_BGM_VOLUME,
 } from "./constants";
 
@@ -101,4 +105,15 @@ export function loadOnboardingDone(): boolean {
 
 export function saveOnboardingDone() {
   lsSet(LS_ONBOARDING_DONE, true);
+}
+
+/** How wide the reader left the chat column. Clamped, in case of a stale value. */
+export function loadSidebarWidth(): number {
+  const stored = lsGet<number>(LS_SIDEBAR_WIDTH, SIDEBAR_DEFAULT_WIDTH);
+  if (!Number.isFinite(stored)) return SIDEBAR_DEFAULT_WIDTH;
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored));
+}
+
+export function saveSidebarWidth(width: number) {
+  lsSet(LS_SIDEBAR_WIDTH, Math.round(width));
 }

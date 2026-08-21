@@ -12,6 +12,7 @@ export default function PhaserGame() {
 
   useEffect(() => {
     let mounted = true;
+    let observer: ResizeObserver | null = null;
 
     async function initGame() {
       if (!containerRef.current) return;
@@ -26,6 +27,24 @@ export default function PhaserGame() {
         parent: containerRef.current,
       });
       gameRef.current = game;
+
+      // Phaser only checks its parent's size twice a second, which is a
+      // visible lag while the chat column is being dragged. Watching the
+      // container puts the canvas on the same frame as the drag.
+      let lastWidth = 0;
+      let lastHeight = 0;
+      observer = new ResizeObserver(([entry]) => {
+        const width = Math.round(entry.contentRect.width);
+        const height = Math.round(entry.contentRect.height);
+        // A drag fires this on every frame with sub-pixel differences, and
+        // each call rebuilds the WebGL framebuffer. Only act on real changes.
+        if (width <= 0 || height <= 0) return;
+        if (width === lastWidth && height === lastHeight) return;
+        lastWidth = width;
+        lastHeight = height;
+        game.scale.resize(width, height);
+      });
+      observer.observe(containerRef.current);
     }
 
     initGame().catch((err) => {
@@ -34,6 +53,7 @@ export default function PhaserGame() {
 
     return () => {
       mounted = false;
+      observer?.disconnect();
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;

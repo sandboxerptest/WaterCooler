@@ -18,7 +18,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
 import { ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
 import { onRunCompleted, type CompletedRun } from "./server/achievement-rules";
-import { humansInRoom } from "./server/presence-socket";
+import { humansInRoom, recordActivity } from "./server/presence-socket";
 import { achievementFor } from "./achievements";
 import { CURRENCY_NOTE } from "./erp/currency";
 import { DEFAULT_ROOM_SLUG, normaliseRoomSlug } from "./rooms";
@@ -353,6 +353,12 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   const blocked = providerBlocked(state.room);
   if (blocked) {
     log.warn(`refusing run ${runId}: ${blocked}`);
+    recordActivity(state.room, {
+      kind: "task",
+      actor: (params.seatLabel as string | undefined) ?? "The room",
+      text: "could not start a task",
+      detail: blocked,
+    });
     sendEvent(state, "agent", {
       runId,
       sessionKey,
@@ -365,6 +371,11 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
 
   // Lifecycle start
   sendEvent(state, "agent", { runId, sessionKey, stream: "lifecycle", data: { phase: "start" } });
+  recordActivity(state.room, {
+    kind: "task",
+    actor: (params.seatLabel as string | undefined) ?? "Someone",
+    text: `was set to work: ${message.slice(0, 120)}`,
+  });
 
   const startedAt = Date.now();
   const spec = provider.buildRun({
@@ -492,6 +503,15 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
     }
 
     recordSpend(state.room, parsed);
+
+    const seconds = Math.round((Date.now() - startedAt) / 100) / 10;
+    recordActivity(state.room, {
+      kind: "agent",
+      actor: (params.seatLabel as string | undefined) ?? "An agent",
+      text: `answered: ${message.slice(0, 120)}`,
+      detail: parsed.costUsd ? `${seconds}s · $${parsed.costUsd.toFixed(4)}` : `${seconds}s`,
+    });
+
     announceAchievements(state.room, {
       room: state.room,
       seatId: params.seatId as string | undefined,

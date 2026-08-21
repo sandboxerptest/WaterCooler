@@ -16,6 +16,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { createLogger } from "../logger";
+import { ACTIVITY_LIMIT, type ActivityEntry } from "../activity";
 
 const log = createLogger("RoomStore");
 
@@ -36,6 +37,15 @@ export const ROOM_SPEND_LIMIT_USD = Number(process.env.ROOM_SPEND_LIMIT_USD ?? 5
 
 /** How many strokes one board keeps before the oldest are dropped. */
 const BOARD_STROKE_LIMIT = 2000;
+
+/** How many names the cauldron remembers. */
+export const PINBALL_HIGH_SCORES = 3;
+
+export interface PinballScore {
+  player: string;
+  score: number;
+  scored_at: string;
+}
 
 /** Mirrors the client-side caps so the server cannot grow without bound. */
 export const LIMITS = {
@@ -129,6 +139,27 @@ CREATE TABLE IF NOT EXISTS board_strokes (
   PRIMARY KEY (room, stroke_id)
 );
 
+CREATE TABLE IF NOT EXISTS activity (
+  room      TEXT NOT NULL,
+  position  INTEGER NOT NULL,
+  at        TEXT NOT NULL,
+  kind      TEXT NOT NULL,
+  actor     TEXT NOT NULL,
+  text      TEXT NOT NULL,
+  detail    TEXT,
+  PRIMARY KEY (room, position)
+);
+
+CREATE INDEX IF NOT EXISTS activity_by_room ON activity (room, position);
+
+CREATE TABLE IF NOT EXISTS pinball_scores (
+  room       TEXT NOT NULL,
+  player     TEXT NOT NULL,
+  score      INTEGER NOT NULL,
+  scored_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS pinball_by_room ON pinball_scores (room, score DESC);
 CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
 CREATE INDEX IF NOT EXISTS tasks_by_room ON tasks (room, position);
 CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
@@ -229,6 +260,113 @@ export class RoomStore {
          )`,
       )
       .run(room, room, BOARD_STROKE_LIMIT);
+  }
+
+  // ── Activity log ──────────────────────────────────────
+
+  /**
+   * Add a line to the room's log and hand it back with its position, which
+   * is the id the panel keys off and the order it reads in.
+   */
+  recordActivity(
+    room: string,
+    entry: { kind: string; actor: string; text: string; detail?: string; at?: string },
+  ): ActivityEntry {
+    this.ensureRoom(room);
+    const row = this.db
+      .prepare("SELECT MAX(position) AS edge FROM activity WHERE room = ?")
+      .get(room) as { edge: number | null };
+    const position = (row?.edge ?? 0) + 1;
+    const at = entry.at ?? new Date().toISOString();
+
+    this.db
+      .prepare(
+        "INSERT INTO activity (room, position, at, kind, actor, text, detail) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        room,
+        position,
+        at,
+        entry.kind,
+        entry.actor.slice(0, 40),
+        entry.text.slice(0, 400),
+        entry.detail?.slice(0, 200) ?? null,
+      );
+
+    this.db
+      .prepare(
+        `DELETE FROM activity WHERE room = ? AND position IN (
+           SELECT position FROM activity WHERE room = ? ORDER BY position DESC LIMIT -1 OFFSET ?
+         )`,
+      )
+      .run(room, room, ACTIVITY_LIMIT);
+
+    return {
+      id: position,
+      at,
+      kind: entry.kind as ActivityEntry["kind"],
+      actor: entry.actor,
+      text: entry.text,
+      ...(entry.detail ? { detail: entry.detail } : {}),
+    };
+  }
+
+  /** The log, oldest first, which is how it reads. */
+  listActivity(room: string, limit = ACTIVITY_LIMIT): ActivityEntry[] {
+    this.ensureRoom(room);
+    const rows = this.db
+      .prepare(
+        `SELECT position, at, kind, actor, text, detail FROM activity
+         WHERE room = ? ORDER BY position DESC LIMIT ?`,
+      )
+      .all(room, limit) as Array<{
+      position: number;
+      at: string;
+      kind: string;
+      actor: string;
+      text: string;
+      detail: string | null;
+    }>;
+
+    return rows
+      .map((row) => ({
+        id: row.position,
+        at: row.at,
+        kind: row.kind as ActivityEntry["kind"],
+        actor: row.actor,
+        text: row.text,
+        ...(row.detail ? { detail: row.detail } : {}),
+      }))
+      .reverse();
+  }
+
+  // ── Pinball ───────────────────────────────────────────
+
+  /**
+   * Record a finished game and return the table as it now stands.
+   *
+   * Every game is kept rather than only the best three: the board is a view
+   * over the history, so a score that falls off it when somebody does better
+   * is still there, and "who has played" stays answerable.
+   */
+  recordPinballScore(room: string, player: string, score: number): PinballScore[] {
+    this.ensureRoom(room);
+    this.db
+      .prepare("INSERT INTO pinball_scores (room, player, score, scored_at) VALUES (?, ?, ?, ?)")
+      .run(room, player.slice(0, 16), Math.max(0, Math.round(score)), new Date().toISOString());
+
+    return this.topPinballScores(room);
+  }
+
+  /** The high score table: the best games in this room, best first. */
+  topPinballScores(room: string, limit = PINBALL_HIGH_SCORES): PinballScore[] {
+    this.ensureRoom(room);
+    return this.db
+      .prepare(
+        `SELECT player, score, scored_at FROM pinball_scores
+         WHERE room = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
+      )
+      .all(room, limit) as unknown as PinballScore[];
   }
 
   // ── Achievements ──────────────────────────────────────

@@ -119,7 +119,11 @@ export class CameraController {
     const mw = this.mapWidth;
     const mh = this.mapHeight;
 
-    const bx = viewW > mw ? -(viewW - mw) / 2 : 0;
+    // Pinned left, centred vertically. When the viewport is wider than the
+    // office, the slack goes on the right rather than being split either
+    // side — so the building sits against the chat column instead of
+    // drifting about in the middle as the column is dragged.
+    const bx = 0;
     const by = viewH > mh ? -(viewH - mh) / 2 : 0;
     const bw = viewW > mw ? viewW : mw;
     const bh = viewH > mh ? viewH : mh;

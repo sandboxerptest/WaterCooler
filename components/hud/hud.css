@@ -964,3 +964,528 @@
   outline-offset: 2px;
   border-radius: var(--pixel-radius-sm);
 }
+
+/* ── Cauldron pinball ──────────────────────────────────
+ *
+ * Laid out here rather than inline because the phone layout is a different
+ * shape, not a smaller one: the table moves under the header, the panel
+ * becomes a strip, and a pair of thumb pads appear that a mouse never sees.
+ */
+.pinball-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 46;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  /* The HUD layer takes no pointer events; anything usable opts back in */
+  pointer-events: auto;
+  /* No pull-to-refresh or rubber-banding while a thumb is on the flippers */
+  overscroll-behavior: contain;
+}
+
+.pinball-panel {
+  display: grid;
+  grid-template-columns: auto 168px;
+  grid-template-areas:
+    "play head"
+    "play stats";
+  gap: 10px 14px;
+  padding: 14px;
+  align-items: start;
+}
+
+.pinball-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pinball-play {
+  grid-area: play;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* The whole surface is a control: no scrolling, no double-tap zoom */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pinball-table {
+  --pinball-height: min(560px, 70vh, (100vw - 260px) * 1.75);
+  --pinball-height: min(560px, 70dvh, (100vw - 260px) * 1.75);
+  height: var(--pinball-height);
+  width: calc(var(--pinball-height) / 1.75);
+  display: block;
+  border: 2px solid #2b3f4d;
+  border-radius: var(--pixel-radius-sm);
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+.pinball-stats {
+  grid-area: stats;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pinball-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 8px;
+  color: var(--pixel-muted);
+  margin-bottom: 4px;
+}
+
+.pinball-score {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 8px;
+  line-height: 1.9;
+}
+
+.pinball-hint {
+  font-size: 8px;
+  line-height: 1.8;
+  color: var(--pixel-muted);
+}
+
+.pinball-stat--foot {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+}
+
+/* Thumb pads: shown where there is a thumb to use them */
+.pinball-pads {
+  display: none;
+  gap: 10px;
+}
+
+.pinball-pad {
+  flex: 1;
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  text-align: center;
+  color: var(--pixel-muted);
+  border: 2px solid #2b3f4d;
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pinball-pad.is-held {
+  color: var(--pixel-bg, #0b1418);
+  background: var(--pixel-accent);
+  border-color: var(--pixel-accent);
+}
+
+@media (pointer: coarse), (max-width: 760px) {
+  .pinball-panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "play"
+      "stats";
+    gap: 8px;
+    padding: 10px;
+    width: 100%;
+  }
+
+  .pinball-table {
+    --pinball-height: min(560px, 54vh, (100vw - 44px) * 1.75);
+    --pinball-height: min(560px, 54dvh, (100vw - 44px) * 1.75);
+    margin: 0 auto;
+  }
+
+  .pinball-pads {
+    display: flex;
+  }
+
+  .pinball-stats {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 16px;
+  }
+
+  .pinball-stat--foot {
+    margin-top: 0;
+  }
+
+  /* A phone has no arrow keys and no shoulder buttons to tell it about */
+  .pinball-hint--keys {
+    display: none;
+  }
+}
+
+/* ── The shell: office on the left, chat and activity on the right ────
+ *
+ * The office used to fill the window with the HUD floating over it, and chat
+ * was a flyout that covered the room it was talking about. Now the two live
+ * side by side: the game takes whatever width is left, and the column is a
+ * fixed thing the reader can widen.
+ */
+.app-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--pixel-bg);
+}
+
+.app-stage {
+  position: relative;
+  flex: 1 1 auto;
+  /* Without this the canvas refuses to shrink and pushes the column away */
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.app-sidebar {
+  color: var(--pixel-text);
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  min-width: 0;
+  background: var(--pixel-panel, #14181d);
+  border-left: 2px solid var(--pixel-border, #2b3f4d);
+  z-index: 30;
+}
+
+/* The drag handle: a thin strip that widens under the pointer */
+.app-sidebar__handle {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.app-sidebar__handle::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.app-sidebar__handle:hover::after,
+.app-sidebar__handle:active::after {
+  background: var(--pixel-accent);
+}
+
+.app-sidebar__body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-sidebar__tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 6px 0;
+  border-bottom: 2px solid var(--pixel-border, #2b3f4d);
+}
+
+.app-sidebar__tab {
+  font-family: inherit;
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
+  color: var(--pixel-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+}
+
+.app-sidebar__tab.is-active {
+  color: var(--pixel-accent);
+  border-bottom-color: var(--pixel-accent);
+}
+
+.app-sidebar__collapse {
+  margin-left: auto;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--pixel-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.app-sidebar__collapse:hover {
+  color: var(--pixel-accent);
+}
+
+/* The chat panel was built as a flyout; in here it fills the column */
+.app-sidebar__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-sidebar__content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  width: 100%;
+  max-height: none;
+}
+
+/* On a phone there is no room beside the office, so the column becomes a
+   drawer over it — and the drag handle has nothing to do */
+@media (max-width: 900px) {
+  .app-sidebar {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(94vw, 420px) !important;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .app-sidebar__handle {
+    display: none;
+  }
+}
+
+/* ── The activity log ──────────────────────────────────── */
+.activity {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--pixel-text);
+}
+
+.activity__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity__empty {
+  margin: auto;
+  font-size: 8px;
+  color: var(--pixel-muted);
+  text-align: center;
+}
+
+.activity__row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  font-size: 8px;
+  line-height: 1.7;
+  /* Said outright, because there is nothing above this to inherit from: the
+     panel sets no colour of its own, so without this the browser's default
+     black lands on a near-black panel and the log cannot be read at all. */
+  color: var(--pixel-text);
+}
+
+.activity__icon {
+  color: var(--pixel-muted);
+  text-align: center;
+}
+
+.activity__row--agent .activity__icon,
+.activity__row--task .activity__icon {
+  color: var(--pixel-accent);
+}
+.activity__row--badge .activity__icon {
+  color: var(--pixel-yellow);
+}
+.activity__row--game .activity__icon,
+.activity__row--human .activity__icon {
+  color: var(--pixel-green);
+}
+
+.activity__body {
+  min-width: 0;
+}
+
+.activity__line {
+  overflow-wrap: anywhere;
+}
+
+.activity__actor {
+  color: var(--pixel-accent);
+}
+
+.activity__detail {
+  color: var(--pixel-muted);
+  margin-top: 2px;
+}
+
+.activity__time {
+  color: var(--pixel-muted);
+  white-space: nowrap;
+}
+
+/* ── Ping pong at the water bucket ─────────────────────── */
+.pong-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 46;
+  padding: 12px;
+  pointer-events: auto;
+}
+
+.pong-panel {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(520px, 94vw);
+}
+
+.pong-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pong-table {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 480 / 300;
+  display: block;
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+.pong-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--pixel-text);
+}
+
+.pong-score__you {
+  color: var(--pixel-accent);
+}
+
+.pong-score__dash {
+  color: var(--pixel-muted);
+}
+
+.pong-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.pong-foot__hint,
+.pong-menu__blurb,
+.pong-menu__empty {
+  font-size: 8px;
+  color: var(--pixel-muted);
+  line-height: 1.7;
+}
+
+.pong-foot__result {
+  font-size: 9px;
+  color: var(--pixel-accent);
+}
+
+.pong-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--pixel-text);
+}
+
+.pong-menu__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pong-menu__title {
+  font-size: 8px;
+  color: var(--pixel-muted);
+  letter-spacing: 0.06em;
+}
+
+.pong-menu__item {
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+/* A challenge that arrives while you are elsewhere in the office */
+.pong-toast {
+  position: absolute;
+  right: 16px;
+  bottom: 84px;
+  z-index: 47;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 260px;
+  pointer-events: auto;
+  color: var(--pixel-text);
+}
+
+.pong-toast__text {
+  font-size: 9px;
+  line-height: 1.7;
+}
+
+.pong-toast__actions {
+  display: flex;
+  gap: 8px;
+}

@@ -17,6 +17,8 @@ import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
 import { normaliseRoomSlug } from "../rooms";
 import { achievementFor, type EarnedAchievement } from "../achievements";
+import type { ActivityEntry } from "../activity";
+import { isPongPayload } from "../pong/protocol";
 import { isStroke, sanitiseStroke } from "../whiteboard";
 import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
 import { createLogger } from "../logger";
@@ -71,9 +73,47 @@ interface Room {
 
 let occupancyLookup: (slug: string) => number = () => 0;
 
+/**
+ * How anything in the process reaches a room's sockets.
+ *
+ * Kept on a global rather than in a module variable because a Next route
+ * handler is loaded into its own module graph: `app/api/.../route.ts`
+ * importing this file gets a *second* copy of it, whose module state is not
+ * the one the WebSocket server filled in. The process is the same, so a
+ * shared symbol is what the two copies have in common — without it, a score
+ * saved by an API route would sit in the database until someone refreshed.
+ */
+type RoomBroadcast = (slug: string, message: ServerMessage) => void;
+const BROADCAST_KEY = Symbol.for("watercooler.presence.broadcast");
+
+function currentBroadcast(): RoomBroadcast | null {
+  return (globalThis as Record<symbol, unknown>)[BROADCAST_KEY] as RoomBroadcast | null;
+}
+
 /** How many humans are in a room right now. Zero when the socket is not up. */
 export function humansInRoom(slug: string): number {
   return occupancyLookup(slug);
+}
+
+/**
+ * Put a line in the room's log and tell everyone looking at it.
+ *
+ * Exported because the things worth logging happen all over: agent runs on
+ * the bridge, badges and doors here, high scores in an API route. They all
+ * come through this one door, so what is stored and what is on screen can
+ * never drift apart.
+ */
+export function recordActivity(
+  slug: string,
+  entry: { kind: ActivityEntry["kind"]; actor: string; text: string; detail?: string },
+): void {
+  try {
+    const saved = getRoomStore().recordActivity(slug, entry);
+    currentBroadcast()?.(slug, { type: "activity", entry: saved });
+  } catch (err) {
+    // A log line is never worth taking the room down for
+    log.warn("could not record activity:", (err as Error).message);
+  }
 }
 
 export function attachPresenceSocket(server: import("http").Server, path = "/api/room/socket") {
@@ -82,6 +122,9 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   const rooms = new Map<string, Room>();
   /** Which room each connection is in, so later messages can be routed. */
   const roomOf = new Map<string, string>();
+
+  (globalThis as Record<symbol, unknown>)[BROADCAST_KEY] = ((slug, message) =>
+    broadcast(slug, message)) satisfies RoomBroadcast;
 
   const roomFor = (slug: string): Room => {
     let room = rooms.get(slug);
@@ -127,6 +170,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         icon: definition.icon,
         at: item.earnedAt,
       });
+
+      recordActivity(slug, {
+        kind: "badge",
+        actor: item.subjectName,
+        text: `earned ${definition.title}`,
+        detail: definition.description,
+      });
     }
   };
 
@@ -143,6 +193,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     if (player) {
       log.info(`${player.name} left "${slug}" (${room.hub.count}/${room.hub.capacity})`);
       broadcast(slug, { type: "left", id, name: player.name });
+      recordActivity(slug, { kind: "human", actor: player.name, text: "left" });
     }
 
     // An empty room costs nothing to forget; its contents live in the store
@@ -333,6 +384,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             capacity: room.hub.capacity,
           });
           broadcast(slug, { type: "joined", player: result.player }, id);
+          recordActivity(slug, {
+            kind: "human",
+            actor: result.player.name,
+            text: "walked in",
+          });
 
           announce(slug, onPlayerJoined(slug, result.player.name));
           if (room.hub.count >= room.hub.capacity) {
@@ -361,6 +417,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             log.info(`${player?.name ?? "someone"} cleared the board in "${slug}"`);
             // Everyone including the author, so a wipe is unambiguous
             broadcast(slug, { type: "board", action: "clear", by: player?.name });
+            recordActivity(slug, {
+              kind: "board",
+              actor: player?.name ?? "someone",
+              text: "wiped the whiteboard",
+            });
             return;
           }
 
@@ -380,6 +441,28 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           const text = typeof parsed.text === "string" ? parsed.text.trim().slice(0, 500) : "";
           if (!text) return;
           relaySpeech(slug, id, text, parsed.scope === "nearby" ? "nearby" : "room");
+          return;
+        }
+
+        if (parsed.type === "pong") {
+          // The server is a post box here: it checks the envelope, finds the
+          // player it is addressed to in this room, and passes it on. What
+          // the two of them do with it is between them.
+          const to = typeof parsed.to === "string" ? parsed.to : "";
+          if (!to || !isPongPayload(parsed.payload)) return;
+          if (roomOf.get(to) !== slug) return;
+
+          const target = room.sockets.get(to);
+          if (!target || target.readyState !== target.OPEN) return;
+
+          const from = room.hub.snapshot().find((p) => p.id === id);
+          target.send(
+            JSON.stringify({
+              type: "pong",
+              from: { id, name: from?.name ?? "Someone" },
+              payload: parsed.payload,
+            }),
+          );
           return;
         }
 

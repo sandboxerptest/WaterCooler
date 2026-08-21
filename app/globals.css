@@ -30,6 +30,16 @@
   --pixel-radius-lg: 12px;
 }
 
+/*
+ * The page has a dark background and, until now, no text colour to go with
+ * it: every panel set its own, and anything that forgot inherited the
+ * browser's black onto a near-black page. Saying it once here means a new
+ * panel starts readable instead of invisible.
+ */
+body {
+  color: var(--pixel-text);
+}
+
 img,
 canvas {
   image-rendering: pixelated;

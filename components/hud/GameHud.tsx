@@ -13,7 +13,6 @@ import type { HudDockItem, HudPanelId } from "./HudDock";
 import TopBar from "./TopBar";
 import BottomBar from "./BottomBar";
 import ConnectionPanel from "./ConnectionPanel";
-import ChatPanel from "./ChatPanel";
 import TaskPanel from "./TaskPanel";
 import WorkerPanel from "./WorkerPanel";
 import SeatManagerModal from "./SeatManagerModal";
@@ -22,8 +21,15 @@ import OnboardingOverlay from "./OnboardingOverlay";
 import NamePrompt from "./NamePrompt";
 import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
+import Pinball from "./Pinball";
+import PingPong from "./PingPong";
 
-export default function GameHud() {
+interface GameHudProps {
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+}
+
+export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) {
   const { state } = useStudio();
   const bgm = useBgm();
   const [openPanel, setOpenPanel] = useState<HudPanelId | null>(null);
@@ -148,6 +154,8 @@ export default function GameHud() {
       <NamePrompt />
       <AchievementToast />
       <Whiteboard />
+      <Pinball />
+      <PingPong />
       {/* Top area: logo | agent pills | tool buttons */}
       <TopBar
         seats={state.seats}
@@ -180,29 +188,16 @@ export default function GameHud() {
         {/* Spacer pushes chat to right */}
         <div style={{ flex: "1 1 auto" }} />
 
-        {/* Chat dock */}
+        {/* Chat lives in the column beside the office; this shows it again */}
         <div className="hud-chat-dock">
-          {openPanel === "chat" && (
-            <div className="hud-chat-dock__panel">
-              <ChatPanel
-                messages={visibleMessages}
-                tasks={visibleTasks}
-                isConnected={state.connection === "connected"}
-                sessions={state.sessions}
-                activeSessionKey={state.activeSessionKey}
-              />
-            </div>
-          )}
           <button
             type="button"
-            className={`hud-chat-dock__btn ${openPanel === "chat" ? "hud-chat-dock__btn--active" : ""}`}
-            onClick={() => togglePanel("chat")}
-            title="Chat"
+            className={`hud-chat-dock__btn ${sidebarOpen ? "hud-chat-dock__btn--active" : ""}`}
+            onClick={onToggleSidebar}
+            title={sidebarOpen ? "Hide chat" : "Show chat"}
           >
             <img
-              src={
-                openPanel === "chat" ? "/ui/icons/icon-chat-active.png" : "/ui/icons/icon-chat.png"
-              }
+              src={sidebarOpen ? "/ui/icons/icon-chat-active.png" : "/ui/icons/icon-chat.png"}
               alt="Chat"
               width={28}
               height={28}
