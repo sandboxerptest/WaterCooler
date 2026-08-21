@@ -109,6 +109,15 @@ export interface PlayerLeftMessage {
   name: string;
 }
 
+/** What this room has spent on agents, and the ceiling it stops at. */
+export interface BudgetMessage {
+  type: "budget";
+  spentUsd: number;
+  limitUsd: number;
+  /** True once the ceiling is reached and dispatch has stopped. */
+  halted: boolean;
+}
+
 export interface WorldBroadcast {
   type: "world";
   change: WorldChange;
@@ -122,7 +131,8 @@ export type ServerMessage =
   | PresenceMessage
   | PlayerJoinedMessage
   | PlayerLeftMessage
-  | WorldBroadcast;
+  | WorldBroadcast
+  | BudgetMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;

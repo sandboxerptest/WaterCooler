@@ -163,3 +163,36 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md). We're especially looking for people 
 ## License
 
 [MIT](./LICENSE)
+
+### Running agents with an API key (cloud mode)
+
+`AGENT_PROVIDER=claude-api` runs the same CLI against an Anthropic API key
+instead of a signed-in account. This is what the cloud deployment uses, where
+there is no logged-in user and a subscription cannot be shared.
+
+```bash
+echo 'ANTHROPIC_API_KEY=sk-...' >> .env.local   # gitignored; never commit it
+AGENT_PROVIDER=claude-api pnpm dev
+```
+
+The key is read from the server's environment and never appears on a command
+line, where it would be visible in process listings. If it is missing or
+malformed the run is refused with a plain sentence in the worker's bubble
+rather than a failed CLI exit.
+
+Three limits apply to every run, whether assigned directly or delegated:
+
+| Limit | Default | Env var |
+| --- | --- | --- |
+| Agents running at once | 4 | `AGENT_MAX_CONCURRENT` |
+| Spend per room | $50 | `ROOM_SPEND_LIMIT_USD` |
+| Humans per room | 4 | — |
+
+Spend is measured server-side from what each run reports, accumulated in the
+room's record, and shown in the HUD next to the occupancy pill. When a room
+reaches its ceiling, dispatch stops until the limit is raised — a hard stop,
+not a warning, because with a host-side key the bill belongs to whoever runs
+the server.
+
+Each seat gets a sandbox at `.agent-workspaces/<room>/<seat>/`, so rooms cannot
+read each other's work.

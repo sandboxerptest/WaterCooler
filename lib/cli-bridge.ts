@@ -16,7 +16,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
-import { DEFAULT_ROOM, getRoomStore } from "./server/room-store";
+import { DEFAULT_ROOM, ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
 import {
   ensureSeatWorkspace,
   getCliProvider,
@@ -124,6 +124,72 @@ function broadcastEvent(event: string, payload: Record<string, unknown>) {
  */
 const dispatchSessions = new Map<string, string>();
 
+/**
+ * How many agents may run at once. Four humans with four seats each is sixteen
+ * possible concurrent runs; without a ceiling a busy room can exhaust the host.
+ */
+const MAX_CONCURRENT_RUNS = Number(process.env.AGENT_MAX_CONCURRENT ?? 4);
+
+let runningCount = 0;
+
+function atCapacity(): boolean {
+  return runningCount >= MAX_CONCURRENT_RUNS;
+}
+
+/** Reason this provider cannot run right now, or null when it is ready. */
+function providerBlocked(): string | null {
+  const reason = provider.preflight?.() ?? null;
+  if (reason) return reason;
+
+  if (atCapacity()) {
+    return `Too many agents are working at once (${MAX_CONCURRENT_RUNS}). Try again in a moment.`;
+  }
+
+  try {
+    if (getRoomStore().isOverBudget(DEFAULT_ROOM)) {
+      return `This room has reached its $${ROOM_SPEND_LIMIT_USD} spend limit. Agents are paused.`;
+    }
+  } catch (err) {
+    log.warn("could not check the budget:", (err as Error).message);
+  }
+
+  return null;
+}
+
+/** Tell every watcher where the room stands against its limit. */
+function broadcastBudget() {
+  try {
+    const store = getRoomStore();
+    const spentUsd = store.getSpend(DEFAULT_ROOM);
+    for (const client of clients) {
+      if (client.ws.readyState !== WebSocket.OPEN) continue;
+      sendFrame(client, {
+        type: "event",
+        event: "budget",
+        payload: {
+          spentUsd,
+          limitUsd: ROOM_SPEND_LIMIT_USD,
+          halted: spentUsd >= ROOM_SPEND_LIMIT_USD,
+        },
+        seq: client.seq++,
+      });
+    }
+  } catch {
+    // Reporting spend must never take a run down with it
+  }
+}
+
+/** Bank what a run cost so a spend ceiling has something to enforce against. */
+function recordSpend(parsed: { costUsd?: number } | null) {
+  if (!parsed?.costUsd) return;
+  try {
+    getRoomStore().addSpend(DEFAULT_ROOM, parsed.costUsd);
+    broadcastBudget();
+  } catch (err) {
+    log.warn("could not record spend:", (err as Error).message);
+  }
+}
+
 function sendResponse(
   state: ClientState,
   id: string,
@@ -205,6 +271,21 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   // Immediate response with runId
   sendResponse(state, id, true, { runId, status: "accepted" });
 
+  // A missing key, a full queue or an exhausted budget should read as a plain
+  // sentence in the worker's bubble, not as a mysterious non-zero exit code.
+  const blocked = providerBlocked();
+  if (blocked) {
+    log.warn(`refusing run ${runId}: ${blocked}`);
+    sendEvent(state, "agent", {
+      runId,
+      sessionKey,
+      stream: "lifecycle",
+      data: { phase: "error", error: blocked },
+    });
+    sendEvent(state, "chat", { runId, sessionKey, state: "error" });
+    return;
+  }
+
   // Lifecycle start
   sendEvent(state, "agent", { runId, sessionKey, stream: "lifecycle", data: { phase: "start" } });
 
@@ -216,7 +297,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
     mcpConfigPath: writeMcpConfig(),
     model: (params.model as string | undefined) ?? process.env.AGENT_TOWN_MODEL,
     workspaceDir: provider.usesWorkspaces
-      ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey)
+      ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey, DEFAULT_ROOM)
       : undefined,
   });
 
@@ -249,6 +330,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   }
 
   state.runningProcesses.set(runId, child);
+  runningCount += 1;
 
   let stdout = "";
   let stderr = "";
@@ -264,6 +346,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   child.on("error", (err) => {
     log.error(`${provider.binName} process error for run ${runId}:`, err.message);
     state.runningProcesses.delete(runId);
+    runningCount = Math.max(0, runningCount - 1);
     sendEvent(state, "agent", {
       runId,
       sessionKey,
@@ -275,6 +358,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
 
   child.on("close", (code) => {
     state.runningProcesses.delete(runId);
+    runningCount = Math.max(0, runningCount - 1);
 
     if (code === null || code !== 0) {
       const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
@@ -304,6 +388,8 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
       sendEvent(state, "chat", { runId, sessionKey, state: "error" });
       return;
     }
+
+    recordSpend(parsed);
 
     // Store the CLI session id so the next message to this seat resumes it
     if (parsed.sessionId) {
@@ -553,6 +639,15 @@ export function dispatchToWorker(
       return;
     }
 
+    // Delegation respects the same key, capacity and budget rules; otherwise a
+    // single agent could fan out past every limit by dispatching.
+    const blocked = providerBlocked();
+    if (blocked) {
+      log.warn(`refusing dispatch to ${seat.label}: ${blocked}`);
+      resolve({ result: "", error: blocked });
+      return;
+    }
+
     const runId = `${provider.id}_sub_${Date.now()}_${++runCounter}`;
     const sessionKey = `subagent:dispatch:${seatId}:${runId}`;
 
@@ -573,11 +668,14 @@ export function dispatchToWorker(
       // A dispatched worker does not delegate onward, so no MCP config.
       mcpConfigPath: null,
       model: process.env.AGENT_TOWN_MODEL,
-      workspaceDir: provider.usesWorkspaces ? ensureSeatWorkspace(seat.label) : undefined,
+      workspaceDir: provider.usesWorkspaces
+        ? ensureSeatWorkspace(seat.label, DEFAULT_ROOM)
+        : undefined,
     });
 
     log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
 
+    runningCount += 1;
     let child: ChildProcess;
     try {
       child = spawn(spec.bin, spec.args, {
@@ -586,6 +684,7 @@ export function dispatchToWorker(
         env: { ...process.env },
       });
     } catch (err) {
+      runningCount = Math.max(0, runningCount - 1);
       const errMsg = `Failed to spawn ${provider.binName} for dispatch: ${(err as Error).message}`;
       log.error(errMsg);
       broadcastEvent("agent", {
@@ -609,6 +708,7 @@ export function dispatchToWorker(
     });
 
     child.on("error", (err) => {
+      runningCount = Math.max(0, runningCount - 1);
       log.error(`dispatch process error for run ${runId}:`, err.message);
       broadcastEvent("agent", {
         runId,
@@ -620,6 +720,7 @@ export function dispatchToWorker(
     });
 
     child.on("close", (code) => {
+      runningCount = Math.max(0, runningCount - 1);
       if (code !== 0) {
         const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
         log.error(`dispatch failed for run ${runId}:`, errMsg);
@@ -634,6 +735,7 @@ export function dispatchToWorker(
       }
 
       const parsed = provider.parseResult(stdout);
+      recordSpend(parsed);
       const responseText = parsed ? parsed.text : stdout.trim();
 
       // Store session for future resume

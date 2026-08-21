@@ -11,7 +11,7 @@ import { accessSync, constants, mkdirSync } from "fs";
 import { delimiter, join } from "path";
 import { homedir } from "os";
 
-export type CliProviderId = "auggie" | "claude";
+export type CliProviderId = "auggie" | "claude" | "claude-api";
 
 export interface ModelChoice {
   id: string;
@@ -44,6 +44,10 @@ export interface CliParsedResult {
   text: string;
   sessionId?: string;
   isError?: boolean;
+  /** What this turn cost, when the CLI reports it. */
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface CliProvider {
@@ -58,6 +62,12 @@ export interface CliProvider {
   usesWorkspaces: boolean;
   /** Hint shown in the connection panel when the CLI is missing. */
   setupHint: string;
+  /**
+   * Checked before every run. Returns a human-readable reason the provider
+   * cannot run right now, or null when it is ready — a missing API key should
+   * say so in the worker's bubble, not fail as an opaque exit code.
+   */
+  preflight?(): string | null;
   buildRun(opts: CliRunOptions): CliRunSpec;
   parseResult(raw: string): CliParsedResult | null;
   /** Argv for enumerating models, when the CLI can report them. */
@@ -111,11 +121,12 @@ function slugify(seatKey: string): string {
 }
 
 /**
- * Return (creating if needed) the sandbox directory for a seat. Agents run
- * with their cwd set here, so edits stay inside their own space.
+ * Return (creating if needed) the sandbox directory for a seat. Agents run with
+ * their cwd set here, so edits stay inside their own space — and rooms are kept
+ * apart, so one room's agents cannot read another's work.
  */
-export function ensureSeatWorkspace(seatKey: string): string | undefined {
-  const dir = join(process.cwd(), WORKSPACE_ROOT, slugify(seatKey));
+export function ensureSeatWorkspace(seatKey: string, room = "local"): string | undefined {
+  const dir = join(process.cwd(), WORKSPACE_ROOT, slugify(room), slugify(seatKey));
   try {
     mkdirSync(dir, { recursive: true });
     return dir;
@@ -192,6 +203,24 @@ const auggieProvider: CliProvider = {
 
 // ── Claude Code ────────────────────────────────────────
 
+/** Shared by both Claude providers: same CLI, different credentials. */
+function parseClaudeResult(raw: string): CliParsedResult | null {
+  const parsed = parseJsonObject(raw);
+  if (!parsed) return null;
+
+  const usage = (parsed.usage ?? {}) as Record<string, unknown>;
+  const asCount = (value: unknown) => (typeof value === "number" ? value : undefined);
+
+  return {
+    text: readResultText(parsed),
+    sessionId: typeof parsed.session_id === "string" ? parsed.session_id : undefined,
+    isError: parsed.is_error === true,
+    costUsd: typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd : undefined,
+    inputTokens: asCount(usage.input_tokens),
+    outputTokens: asCount(usage.output_tokens),
+  };
+}
+
 /**
  * MCP tools are not auto-approved in headless mode, so the dispatch tool has
  * to be named explicitly or delegation silently fails.
@@ -233,13 +262,7 @@ const claudeProvider: CliProvider = {
   },
 
   parseResult(raw) {
-    const parsed = parseJsonObject(raw);
-    if (!parsed) return null;
-    return {
-      text: readResultText(parsed),
-      sessionId: typeof parsed.session_id === "string" ? parsed.session_id : undefined,
-      isError: parsed.is_error === true,
-    };
+    return parseClaudeResult(raw);
   },
 
   // `claude` has no machine-readable model list; keep a curated one.
@@ -250,16 +273,56 @@ const claudeProvider: CliProvider = {
   ],
 };
 
+// ── Claude via API key ─────────────────────────────────
+
+/**
+ * The same CLI, credentialed with an Anthropic API key instead of a signed-in
+ * account. This is what runs in the cloud, where there is no logged-in user and
+ * a subscription cannot be shared: the key is read from the environment and
+ * never passed on the command line, where it would show up in process listings.
+ */
+const claudeApiProvider: CliProvider = {
+  id: "claude-api",
+  displayName: "Claude (API key)",
+  binName: "claude",
+  binEnvVar: "CLAUDE_BIN",
+  usesWorkspaces: true,
+  setupHint: "Set ANTHROPIC_API_KEY in the server environment.",
+
+  preflight() {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) return "No ANTHROPIC_API_KEY set on the server — agents cannot run.";
+    if (!key.startsWith("sk-")) return "ANTHROPIC_API_KEY does not look like an API key.";
+    return null;
+  },
+
+  buildRun(options) {
+    // Identical argv to the signed-in provider; only the credential differs
+    return claudeProvider.buildRun(options);
+  },
+
+  parseResult(raw) {
+    return parseClaudeResult(raw);
+  },
+
+  staticModels: [
+    { id: "opus", provider: "claude-api", contextWindow: 200000 },
+    { id: "sonnet", provider: "claude-api", contextWindow: 200000 },
+    { id: "haiku", provider: "claude-api", contextWindow: 200000 },
+  ],
+};
+
 // ── Registry ───────────────────────────────────────────
 
 const PROVIDERS: Record<CliProviderId, CliProvider> = {
   auggie: auggieProvider,
   claude: claudeProvider,
+  "claude-api": claudeApiProvider,
 };
 
 /** True when the configured provider is CLI-backed rather than a real gateway. */
 export function isCliProviderId(value: string | undefined): value is CliProviderId {
-  return value === "auggie" || value === "claude";
+  return value === "auggie" || value === "claude" || value === "claude-api";
 }
 
 export function getCliProvider(id: CliProviderId): CliProvider {

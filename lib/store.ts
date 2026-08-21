@@ -160,6 +160,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       // all of it back at everyone.
       primeFromSnapshot({ tasks, messages: chat, seats: snapshot.seats, sessions });
 
+      if (snapshot.budget) {
+        gameEvents.emit(
+          "budget-updated",
+          snapshot.budget.spentUsd,
+          snapshot.budget.limitUsd,
+          snapshot.budget.halted,
+        );
+      }
+
       // Writes are blocked until this point: the save effects run on mount with
       // empty state, and against a server that would erase the room before its
       // contents arrived.

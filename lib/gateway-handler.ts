@@ -371,6 +371,12 @@ export function wireGatewayClient(client: GatewayClient, refs: HandlerRefs) {
     }
   });
 
+  client.on("budget", (payload: unknown) => {
+    const budget = payload as { spentUsd?: number; limitUsd?: number; halted?: boolean };
+    if (typeof budget?.spentUsd !== "number" || typeof budget?.limitUsd !== "number") return;
+    gameEvents.emit("budget-updated", budget.spentUsd, budget.limitUsd, budget.halted === true);
+  });
+
   client.on("chat", (payload: unknown) => {
     if (!isChatPayload(payload)) return;
     const p = payload;

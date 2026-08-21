@@ -27,6 +27,13 @@ export const LOCAL_PLAYER = "local";
 
 const DB_PATH = process.env.ROOM_DB_PATH ?? join(process.cwd(), ".data", "watercooler.sqlite");
 
+/**
+ * What a single room may spend on agents before it stops dispatching. This is a
+ * hard stop rather than a warning: with an open room and a host-side API key,
+ * the bill is the host's, and a runaway loop should end by itself.
+ */
+export const ROOM_SPEND_LIMIT_USD = Number(process.env.ROOM_SPEND_LIMIT_USD ?? 50);
+
 /** Mirrors the client-side caps so the server cannot grow without bound. */
 export const LIMITS = {
   tasks: 200,
@@ -46,7 +53,8 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS rooms (
   slug               TEXT PRIMARY KEY,
   created_at         TEXT NOT NULL,
-  active_session_key TEXT
+  active_session_key TEXT,
+  spend_usd          REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS players (
@@ -135,7 +143,40 @@ export class RoomStore {
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA foreign_keys = ON");
     this.db.exec(SCHEMA);
+    this.migrate();
     log.info(`opened ${path}`);
+  }
+
+  /** Additive migrations for databases created by an earlier version. */
+  private migrate() {
+    try {
+      this.db.exec("ALTER TABLE rooms ADD COLUMN spend_usd REAL NOT NULL DEFAULT 0");
+    } catch {
+      // Already present, which is the common case
+    }
+  }
+
+  /**
+   * Record what a run cost. Spend is tracked server-side because it is what a
+   * ceiling has to be enforced against — a client could simply not report it.
+   */
+  addSpend(room: string, usd: number) {
+    if (!Number.isFinite(usd) || usd <= 0) return;
+    this.ensureRoom(room);
+    this.db.prepare("UPDATE rooms SET spend_usd = spend_usd + ? WHERE slug = ?").run(usd, room);
+  }
+
+  /** True once this room has spent its allowance. */
+  isOverBudget(room: string): boolean {
+    return this.getSpend(room) >= ROOM_SPEND_LIMIT_USD;
+  }
+
+  getSpend(room: string): number {
+    this.ensureRoom(room);
+    const row = this.db.prepare("SELECT spend_usd FROM rooms WHERE slug = ?").get(room) as
+      | { spend_usd: number }
+      | undefined;
+    return row?.spend_usd ?? 0;
   }
 
   ensureRoom(room: string) {

@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { DEFAULT_ROOM, getRoomStore } from "@/lib/server/room-store";
+import { DEFAULT_ROOM, ROOM_SPEND_LIMIT_USD, getRoomStore } from "@/lib/server/room-store";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("RoomAPI");
@@ -22,8 +22,18 @@ function roomFrom(request: Request): string {
 
 export async function GET(request: Request) {
   try {
-    const snapshot = getRoomStore().getSnapshot(roomFrom(request));
-    return NextResponse.json(snapshot);
+    const store = getRoomStore();
+    const room = roomFrom(request);
+    const snapshot = store.getSnapshot(room);
+    const spentUsd = store.getSpend(room);
+    return NextResponse.json({
+      ...snapshot,
+      budget: {
+        spentUsd,
+        limitUsd: ROOM_SPEND_LIMIT_USD,
+        halted: spentUsd >= ROOM_SPEND_LIMIT_USD,
+      },
+    });
   } catch (err) {
     log.error("snapshot failed:", (err as Error).message);
     return NextResponse.json({ error: "Failed to read room state" }, { status: 500 });

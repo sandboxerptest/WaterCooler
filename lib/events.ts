@@ -25,6 +25,8 @@ export interface GameEventMap {
   "presence-left": [id: string];
   /** How many humans are in the room, for the HUD. */
   "presence-count": [count: number, capacity: number];
+  /** What the room has spent on agents, and the ceiling it stops at. */
+  "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
   "task-aborted": [runId: string];
   "task-completed": [runId: string];
   "task-failed": [runId: string];

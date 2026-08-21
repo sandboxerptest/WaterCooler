@@ -8,6 +8,7 @@ export function getAgentProvider(): AgentProvider {
   const val = process.env.NEXT_PUBLIC_AGENT_PROVIDER;
   if (val === "auggie") return "auggie";
   if (val === "openclaw") return "openclaw";
+  if (val === "claude-api") return "claude-api";
   return "claude";
 }
 
@@ -17,13 +18,14 @@ export function getAgentProvider(): AgentProvider {
  * in-process bridge.
  */
 export function isCliProvider(provider: AgentProvider = getAgentProvider()): boolean {
-  return provider === "auggie" || provider === "claude";
+  return provider === "auggie" || provider === "claude" || provider === "claude-api";
 }
 
 /** Human-readable provider name for HUD copy. */
 export function getProviderLabel(provider: AgentProvider = getAgentProvider()): string {
   if (provider === "auggie") return "Auggie";
   if (provider === "claude") return "Claude Code";
+  if (provider === "claude-api") return "Claude (API key)";
   return "OpenClaw";
 }
 

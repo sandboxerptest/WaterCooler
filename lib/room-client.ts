@@ -20,12 +20,19 @@ const ENDPOINT = "/api/room/state";
 /** Long enough to batch a burst of reducer updates, short enough to survive a refresh. */
 export const WRITE_DEBOUNCE_MS = 400;
 
+export interface RoomBudget {
+  spentUsd: number;
+  limitUsd: number;
+  halted: boolean;
+}
+
 export interface RoomSnapshot {
   tasks: TaskItem[];
   messages: ChatMessage[];
   sessions: SessionRecord[];
   seats: PersistedSeatConfig[];
   activeSessionKey: string | null;
+  budget?: RoomBudget;
 }
 
 export interface RoomPatch {
@@ -74,6 +81,7 @@ export async function fetchRoomSnapshot(mainSessionKey: string): Promise<RoomSna
       sessions: raw.sessions ?? [],
       seats: raw.seats ?? [],
       activeSessionKey: raw.activeSessionKey ?? null,
+      budget: raw.budget,
     };
   } catch (err) {
     log.warn("snapshot failed:", (err as Error).message);
