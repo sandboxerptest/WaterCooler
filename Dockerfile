@@ -32,7 +32,11 @@ ENV NODE_ENV=production
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
-  && npm install -g @anthropic-ai/claude-code
+  # The CLI's postinstall fetches its platform binary; npm skips install
+  # scripts for global installs by default, which would leave `claude` present
+  # but unable to run.
+  && npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code \
+  && claude --version
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
