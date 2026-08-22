@@ -350,21 +350,15 @@ export default function Pinball() {
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    // preventDefault stops the browser turning this into a scroll, a text
-    // selection or a double-tap zoom halfway through a game
-    event.preventDefault();
+    // Which half of the *screen* was touched, not which half of the table.
+    // The table is a panel in the middle of a phone screen, so a thumb where
+    // thumbs actually rest — at the edge — was landing on the backdrop and
+    // closing the game rather than working that flipper.
+    //
+    // No pointer capture: the surface is the whole screen, so a thumb cannot
+    // slide off it, and capturing would steal the taps meant for the buttons.
     const bounds = event.currentTarget.getBoundingClientRect();
     touchesRef.current.set(event.pointerId, touchSide(event.clientX, bounds.left, bounds.width));
-
-    // Capture keeps a thumb that slides off the pad still counted as held.
-    // It is a nicety, not a requirement, and it throws if the browser has
-    // already let go of the pointer — losing it must not cost us the flipper.
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // The flipper works either way
-    }
-
     syncHeld();
   };
 
@@ -379,8 +373,16 @@ export default function Pinball() {
   return (
     <div
       className="pinball-overlay"
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       onClick={(event) => {
-        if (event.target === event.currentTarget) close();
+        // Clicking beside the table closes it with a mouse. On a touch screen
+        // that same spot is where a thumb goes, so there the X is the way out
+        // and a tap at the edge is a flipper.
+        if (event.target !== event.currentTarget) return;
+        if (window.matchMedia("(pointer: coarse)").matches) return;
+        close();
       }}
       role="dialog"
       aria-label="Cauldron pinball"
@@ -403,12 +405,7 @@ export default function Pinball() {
         {/* Everything inside here answers to a thumb: the side of this box you
             touch is the flipper that swings, and while the ball is still in
             the lane, holding anywhere pulls the plunger. */}
-        <div
-          className="pinball-play"
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        >
+        <div className="pinball-play">
           <canvas ref={canvasRef} className="pinball-table" />
 
           <div className="pinball-pads">

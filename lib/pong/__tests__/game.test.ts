@@ -10,6 +10,7 @@ import {
   isMatchPoint,
   paddleX,
   stepPong,
+  towardTarget,
   type PongInput,
   type PongState,
 } from "../game";
@@ -187,6 +188,22 @@ describe("the paddles", () => {
   it("sit inside the table at both ends", () => {
     expect(paddleX("left")).toBeLessThan(TABLE_WIDTH / 2);
     expect(paddleX("right")).toBeGreaterThan(TABLE_WIDTH / 2);
+  });
+});
+
+describe("a finger on the table", () => {
+  it("moves the bat toward where the finger is", () => {
+    expect(towardTarget(100, 200)).toBe(1);
+    expect(towardTarget(200, 100)).toBe(-1);
+  });
+
+  it("stops once it is close enough, rather than shivering around the spot", () => {
+    expect(towardTarget(150, 152)).toBe(0);
+    expect(towardTarget(150, 150)).toBe(0);
+  });
+
+  it("still moves for a gap worth crossing", () => {
+    expect(towardTarget(150, 160)).toBe(1);
   });
 });
 

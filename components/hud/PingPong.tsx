@@ -17,6 +17,7 @@ import {
   isMatchPoint,
   paddleX,
   stepPong,
+  towardTarget,
   type PongState,
   type Side,
 } from "@/lib/pong/game";
@@ -90,6 +91,14 @@ function drawTable(ctx: CanvasRenderingContext2D, state: PongState, you: Side | 
   ctx.fill();
 }
 
+/** Where on the table, in its own coordinates, a pointer is. */
+function tableYFromPointer(event: React.PointerEvent<HTMLElement>): number {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  if (bounds.height === 0) return TABLE_HEIGHT / 2;
+  const fraction = (event.clientY - bounds.top) / bounds.height;
+  return Math.min(TABLE_HEIGHT, Math.max(0, fraction * TABLE_HEIGHT));
+}
+
 export default function PingPong() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>({ at: "menu" });
@@ -106,6 +115,8 @@ export default function PingPong() {
   const gameRef = useRef<PongState | null>(null);
   const modeRef = useRef<Mode>(mode);
   const keysRef = useRef({ up: false, down: false });
+  /** Where a finger is asking the bat to be, in table coordinates. */
+  const touchTargetRef = useRef<number | null>(null);
   const guestPaddleRef = useRef<number | null>(null);
   const lastSyncRef = useRef(0);
   const challengeCount = useRef(0);
@@ -233,6 +244,7 @@ export default function PingPong() {
       window.removeEventListener("keydown", onDown, true);
       window.removeEventListener("keyup", onUp, true);
       keysRef.current = { up: false, down: false };
+      touchTargetRef.current = null;
     };
   }, [open, close]);
 
@@ -267,7 +279,10 @@ export default function PingPong() {
       last = now;
 
       const mySide: Side = current.at === "match" ? current.side : "left";
-      const mine = (keysRef.current.up ? -1 : 0) + (keysRef.current.down ? 1 : 0);
+      const keyed = (keysRef.current.up ? -1 : 0) + (keysRef.current.down ? 1 : 0);
+      const finger = touchTargetRef.current;
+      const mine =
+        keyed !== 0 || finger === null ? keyed : towardTarget(game.paddles[mySide], finger);
 
       while (carry >= STEP) {
         if (current.at === "computer") {
@@ -413,7 +428,12 @@ export default function PingPong() {
     <div
       className="pong-overlay"
       onClick={(event) => {
-        if (event.target === event.currentTarget) close();
+        // With a mouse, clicking beside the table leaves. With a finger that
+        // is where you rest your hand while playing, so there the X is the
+        // way out and the edge of the screen is not a trapdoor.
+        if (event.target !== event.currentTarget) return;
+        if (window.matchMedia("(pointer: coarse)").matches) return;
+        close();
       }}
       role="dialog"
       aria-label="Ping pong"
@@ -504,7 +524,29 @@ export default function PingPong() {
               </span>
             </div>
 
-            <canvas ref={canvasRef} className="pong-table" />
+            {/* Slide a finger anywhere on the table: the bat comes to it.
+                Absolute rather than relative, because a bat that has to be
+                dragged from wherever it happens to be is a poor way to
+                answer a ball already on its way. */}
+            <div
+              className="pong-touch"
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+                touchTargetRef.current = tableYFromPointer(event);
+              }}
+              onPointerMove={(event) => {
+                if (touchTargetRef.current === null) return;
+                touchTargetRef.current = tableYFromPointer(event);
+              }}
+              onPointerUp={() => {
+                touchTargetRef.current = null;
+              }}
+              onPointerCancel={() => {
+                touchTargetRef.current = null;
+              }}
+            >
+              <canvas ref={canvasRef} className="pong-table" />
+            </div>
 
             <div className="pong-foot">
               {display.winner ? (
@@ -525,7 +567,8 @@ export default function PingPong() {
                 </>
               ) : (
                 <span className="pong-foot__hint">
-                  {display.matchPoint ? "Match point. " : ""}↑ ↓ or W / S to move · Esc to leave
+                  {display.matchPoint ? "Match point. " : ""}Slide to move · ↑ ↓ or W / S · Esc to
+                  leave
                 </span>
               )}
             </div>

@@ -51,7 +51,6 @@ export class InteractionMenu {
     this.container = scene.add.container(0, 0, [this.bg]);
     this.container.setDepth(DEPTH);
     this.container.setVisible(false);
-    this.container.setScrollFactor(0);
 
     const kb = scene.input.keyboard;
     if (!kb) throw new Error("Keyboard plugin not available");
@@ -126,11 +125,20 @@ export class InteractionMenu {
           this.updateHighlight();
         }
       });
+      // A finger produces no hover, so the option lights up as it is pressed
+      // rather than only when a mouse passes over it
       hit.on("pointerdown", () => {
-        if (opt.enabled) {
-          this.hide();
-          opt.action();
-        }
+        if (!opt.enabled) return;
+        this.selectedIndex = i;
+        this.updateHighlight();
+      });
+
+      // Acted on release: a press that slides off the option is a change of
+      // mind, which is how every other button on a phone behaves
+      hit.on("pointerup", () => {
+        if (!opt.enabled || !this._visible) return;
+        this.hide();
+        opt.action();
       });
       this.hitZones.push(hit);
       this.container.add(hit);
@@ -138,13 +146,27 @@ export class InteractionMenu {
 
     this.updateHighlight();
 
+    // Placed in the world, not on the screen.
+    //
+    // It used to be pinned to the camera with a scroll factor of zero and
+    // positioned in screen pixels, which renders correctly but leaves
+    // Phaser's hit testing measuring somewhere else — the options answered a
+    // mouse only by luck of where the camera happened to be, and a finger
+    // not at all. In world space both agree, at any zoom or scroll.
+    //
+    // The size is divided by the zoom so the menu stays the same size on
+    // screen however far in or out the office is.
     const cam = this.scene.cameras.main;
-    const screenX = (worldX - cam.scrollX) * cam.zoom;
-    const screenY = (worldY - cam.scrollY) * cam.zoom;
-    const menuX = Math.min(screenX - MENU_WIDTH / 2, cam.width - MENU_WIDTH - 10);
-    const menuY = Math.max(screenY - totalH - 10, 10);
+    const scale = 1 / cam.zoom;
+    const width = MENU_WIDTH * scale;
+    const height = totalH * scale;
+    const view = cam.worldView;
 
-    this.container.setPosition(Math.max(menuX, 10), menuY);
+    this.container.setScale(scale);
+    this.container.setPosition(
+      Phaser.Math.Clamp(worldX - width / 2, view.x + 8, view.right - width - 8),
+      Phaser.Math.Clamp(worldY - height - 10 * scale, view.y + 8, view.bottom - height - 8),
+    );
     this.container.setVisible(true);
     this._visible = true;
   }

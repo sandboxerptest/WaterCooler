@@ -55,6 +55,18 @@ export interface PongInput {
   right: -1 | 0 | 1;
 }
 
+/**
+ * Which way to move a bat to reach where a finger is.
+ *
+ * A finger says *where*, a key says *which way*, and the game only speaks the
+ * second — so the gap is turned into a direction, and ignored once it is
+ * close enough that chasing it would only jitter.
+ */
+export function towardTarget(paddle: number, target: number, slack = 4): -1 | 0 | 1 {
+  if (Math.abs(target - paddle) <= slack) return 0;
+  return target > paddle ? 1 : -1;
+}
+
 export function createPong(serveTo: Side = "right"): PongState {
   return {
     ball: { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT / 2, vx: 0, vy: 0 },

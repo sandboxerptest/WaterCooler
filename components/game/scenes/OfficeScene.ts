@@ -404,7 +404,12 @@ export class OfficeScene extends Phaser.Scene {
     let down: { x: number; y: number; at: number } | null = null;
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      down = { x: pointer.x, y: pointer.y, at: pointer.downTime };
+      // A press that starts on the worker menu belongs to the menu: it closes
+      // itself on release, and without this the same gesture would then read
+      // as a tap on the floor underneath it
+      down = this.interactionManager.interactionMenu.visible
+        ? null
+        : { x: pointer.x, y: pointer.y, at: pointer.downTime };
 
       // Touching the office means you have finished typing. A canvas cannot
       // hold focus of its own, so without this the chat box keeps it — and

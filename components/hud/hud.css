@@ -974,6 +974,11 @@
 .pinball-overlay {
   position: absolute;
   inset: 0;
+  /* The whole screen is the flipper surface, so none of it may scroll or zoom */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1521,4 +1526,12 @@
   .touch-action-btn {
     bottom: 110px;
   }
+}
+
+/* The whole table is the bat's control surface */
+.pong-touch {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
