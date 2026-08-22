@@ -18,6 +18,18 @@ export interface Point {
 /** Close enough to a waypoint to move on to the next one. */
 export const ARRIVE_RADIUS = 6;
 
+/**
+ * How many steps of no real progress mean the walk is going nowhere.
+ *
+ * A route is planned on a grid and walked by a physics body, and the two do
+ * not always agree — squeezing past a desk corner, the body can end up held
+ * against a wall while the steering keeps pushing at it. Better to give up
+ * than to grind there.
+ */
+export const STUCK_STEPS = 40;
+/** Movement below this in one step does not count as getting anywhere. */
+export const STUCK_DISTANCE = 0.35;
+
 /** A tap that wanders further than this was somebody dragging the camera. */
 export const TAP_SLOP = 12;
 /** And one held longer than this was not a tap either. */
@@ -73,6 +85,8 @@ export class TapNavigator {
   private path: Point[] = [];
   private index = 0;
   private arrival: (() => void) | null = null;
+  private wasAt: Point | null = null;
+  private stuckFor = 0;
 
   get active(): boolean {
     return this.index < this.path.length;
@@ -87,6 +101,8 @@ export class TapNavigator {
     this.path = path;
     this.index = 0;
     this.arrival = onArrive ?? null;
+    this.wasAt = null;
+    this.stuckFor = 0;
   }
 
   /**
@@ -100,11 +116,26 @@ export class TapNavigator {
     this.path = [];
     this.index = 0;
     this.arrival = null;
+    this.wasAt = null;
+    this.stuckFor = 0;
   }
 
   /** The velocity to walk this frame, or null when there is nowhere to be. */
   step(at: Point, speed: number): { vx: number; vy: number } | null {
     if (!this.active) return null;
+
+    // Walked into something and stopped getting anywhere: let it go, rather
+    // than leaning on the wall until the player works out what happened
+    if (this.wasAt && Math.hypot(at.x - this.wasAt.x, at.y - this.wasAt.y) < STUCK_DISTANCE) {
+      this.stuckFor += 1;
+      if (this.stuckFor > STUCK_STEPS) {
+        this.cancel();
+        return null;
+      }
+    } else {
+      this.stuckFor = 0;
+    }
+    this.wasAt = { x: at.x, y: at.y };
 
     this.index = advanceAlong(this.path, this.index, at);
     if (!this.active) {

@@ -16,6 +16,7 @@ import { gameEvents } from "@/lib/events";
 import { createLogger } from "@/lib/logger";
 import {
   BOSS_INTERACT_DISTANCE,
+  PLAYER_SPAWN_OFFSET_X,
   BUCKET_INTERACT_DISTANCE,
   CAULDRON_INTERACT_DISTANCE,
   PF_PADDING,
@@ -190,7 +191,13 @@ export class OfficeScene extends Phaser.Scene {
     const bucket = pois.find((poi) => /bucket/i.test(poi.name));
     this.bucketZone = bucket ? { x: bucket.x, y: bucket.y } : null;
 
-    this.player = new Player(this, bossSpawn.x, bossSpawn.y, bossSpawn.facing);
+    // Beside the desk, not in it — the nook has walls on three sides
+    this.player = new Player(
+      this,
+      bossSpawn.x + PLAYER_SPAWN_OFFSET_X,
+      bossSpawn.y,
+      bossSpawn.facing,
+    );
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
@@ -429,11 +436,26 @@ export class OfficeScene extends Phaser.Scene {
     this.game.canvas.oncontextmenu = (event) => event.preventDefault();
   }
 
+  /**
+   * Where the character actually stands.
+   *
+   * The sprite is a whole person tall and its middle is around their chest;
+   * the physics body is a small box at their feet, a good two-thirds of a
+   * tile lower. Routes are walked by the body, so they have to be planned
+   * and steered from it — measuring from the sprite instead puts the feet
+   * below the path, and in a tight spot that means walking into the wall.
+   */
+  private feet(): { x: number; y: number } {
+    const body = this.player.sprite.body as Phaser.Physics.Arcade.Body;
+    return { x: body.center.x, y: body.center.y };
+  }
+
   /** Route to a point and walk it, acting on whatever is there on arrival. */
   private walkTo(x: number, y: number) {
     if (!this.pathfinder) return;
 
-    const path = this.pathfinder.findPath(this.player.sprite.x, this.player.sprite.y, x, y);
+    const from = this.feet();
+    const path = this.pathfinder.findPath(from.x, from.y, x, y);
     if (!path || path.length === 0) return;
 
     // Whatever is at the end gets the same treatment as pressing E there,
@@ -542,9 +564,7 @@ export class OfficeScene extends Phaser.Scene {
     // A key or a stick means the player has taken over, and the tap they
     // made a moment ago is no longer what they want
     const padVelocity = this.gamepad.velocity(MOVE_SPEED);
-    const steering = this.navigator.active
-      ? this.navigator.step({ x: this.player.sprite.x, y: this.player.sprite.y }, MOVE_SPEED)
-      : null;
+    const steering = this.navigator.active ? this.navigator.step(this.feet(), MOVE_SPEED) : null;
 
     if (
       this.navigator.active &&

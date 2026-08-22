@@ -100,6 +100,39 @@ describe("the navigator", () => {
     expect(arrived).not.toHaveBeenCalled();
   });
 
+  it("gives up when it stops getting anywhere", () => {
+    // Held against a desk corner by the physics, the steering would otherwise
+    // lean on the wall for ever and the player would just see a stuck character
+    const arrived = vi.fn();
+    const nav = new TapNavigator();
+    nav.follow([{ x: 500, y: 0 }], arrived);
+
+    const wedged = { x: 0, y: 0 };
+    let steps = 0;
+    while (nav.active && steps < 500) {
+      nav.step(wedged, 200); // never actually moves
+      steps += 1;
+    }
+
+    expect(nav.active).toBe(false);
+    expect(steps).toBeLessThan(200);
+    expect(arrived).not.toHaveBeenCalled();
+  });
+
+  it("does not give up on a walk that is making progress", () => {
+    const nav = new TapNavigator();
+    nav.follow([{ x: 400, y: 0 }]);
+
+    const at = { x: 0, y: 0 };
+    for (let i = 0; i < 300 && nav.active; i++) {
+      const velocity = nav.step(at, 120);
+      if (!velocity) break;
+      at.x += velocity.vx * (1 / 60);
+      at.y += velocity.vy * (1 / 60);
+    }
+    expect(at.x).toBeGreaterThan(390);
+  });
+
   it("knows where it is headed, for a marker on the floor", () => {
     const nav = new TapNavigator();
     nav.follow([

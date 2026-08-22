@@ -6,7 +6,24 @@ export const GAME_HEIGHT = 720;
 
 // ── Interaction distances (pixels) ───────────────────────
 export const INTERACT_DISTANCE = 48;
-export const BOSS_INTERACT_DISTANCE = 34;
+/**
+ * Reach of the boss terminal.
+ *
+ * Wide enough to cover where the player now starts, a step to the side of the
+ * desk rather than wedged behind it, so the prompt is there to be seen the
+ * moment they arrive.
+ */
+export const BOSS_INTERACT_DISTANCE = 64;
+
+/**
+ * How far to the side of the desk the player starts.
+ *
+ * The desk sits in a nook with walls on three sides: standing in it, the only
+ * way out is right, and a first click anywhere else sends the character into
+ * a wall before it finds its way round. A step clear of it is a better place
+ * to begin, and the desk is still within arm's reach.
+ */
+export const PLAYER_SPAWN_OFFSET_X = 56;
 /**
  * The cauldron is a 2x2 prop with a solid footprint, so a player cannot get
  * within 34px of its middle from any side. Measured from the two sides it can
