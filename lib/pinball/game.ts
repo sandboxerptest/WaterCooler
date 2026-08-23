@@ -24,6 +24,7 @@ import {
   BALLS_PER_GAME,
   BANK_BONUS,
   DROP_TARGETS,
+  LANE_GATE,
   MAX_MULTIPLIER,
   TARGET_COUNT,
   TARGET_FACE_MIN,
@@ -211,6 +212,13 @@ export function stepGame(state: PinballState, input: PinballInput, dt: number, n
       contacts.push(contact);
       state.lastHit = { x: bumper.c.x, y: bumper.c.y, points: bumper.points, at: now };
     }
+  }
+
+  // The lane's one-way gate. Only there when the ball is on its way down, so
+  // a plunged ball rides up through it and nothing falls back in behind it.
+  if (ball.v.y > 0) {
+    const gate = segmentContact(ball, LANE_GATE, 0, WALL_RESTITUTION);
+    if (gate) contacts.push(gate);
   }
 
   let targetPoints = 0;

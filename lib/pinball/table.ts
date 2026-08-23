@@ -119,6 +119,19 @@ export const WALLS: Segment[] = [
   wall(224, 470, 224, 540),
 ];
 
+/**
+ * The gate at the top of the plunger lane.
+ *
+ * A real table has a one-way flap here for the same reason: the ball rides up
+ * past it and then cannot get back in, so the lane is a way out of the lane
+ * and not a hole in the middle of the game. It is checked only while the ball
+ * is falling, which is what makes it one-way.
+ *
+ * Tilted, so a ball landing on it rolls off into the playfield rather than
+ * sitting on it — the same reason the drop target bank leans.
+ */
+export const LANE_GATE: Segment = wall(LANE_X - 2, 204, TABLE_WIDTH, 184, 0.15);
+
 export const BUMPERS: Bumper[] = [
   { c: { x: 96, y: 168 }, r: 17, kick: 150, points: 100 },
   { c: { x: 196, y: 148 }, r: 17, kick: 150, points: 100 },

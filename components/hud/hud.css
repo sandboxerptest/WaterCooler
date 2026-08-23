@@ -1071,29 +1071,15 @@
   gap: 8px;
 }
 
-/* Thumb pads: shown where there is a thumb to use them */
-.pinball-pads {
+/* The screen is the control; this only says so, and only where it applies */
+.pinball-hint--touch {
   display: none;
-  gap: 10px;
 }
 
-.pinball-pad {
-  flex: 1;
-  min-height: 56px;
-  display: grid;
-  place-items: center;
-  font-size: 8px;
-  text-align: center;
-  color: var(--pixel-muted);
-  border: 2px solid #2b3f4d;
-  border-radius: var(--pixel-radius-sm);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.pinball-pad.is-held {
-  color: var(--pixel-bg, #0b1418);
-  background: var(--pixel-accent);
-  border-color: var(--pixel-accent);
+@media (pointer: coarse) {
+  .pinball-hint--touch {
+    display: block;
+  }
 }
 
 @media (pointer: coarse), (max-width: 760px) {
@@ -1112,10 +1098,6 @@
     --pinball-height: min(560px, 54vh, (100vw - 44px) * 1.75);
     --pinball-height: min(560px, 54dvh, (100vw - 44px) * 1.75);
     margin: 0 auto;
-  }
-
-  .pinball-pads {
-    display: flex;
   }
 
   .pinball-stats {

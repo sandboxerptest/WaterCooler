@@ -171,12 +171,10 @@ export default function Pinball() {
   const submittedRef = useRef(false);
   /** Which side each finger is on. A map, because two thumbs is the point. */
   const touchesRef = useRef(new Map<number, FlipperSide>());
-  const [held, setHeld] = useState({ left: false, right: false });
 
   const close = useCallback(() => {
     setOpen(false);
     touchesRef.current.clear();
-    setHeld({ left: false, right: false });
     gameEvents.emit("pinball-closed");
   }, []);
 
@@ -341,14 +339,6 @@ export default function Pinball() {
     return () => cancelAnimationFrame(frame);
   }, [open, submitScore]);
 
-  const syncHeld = () => {
-    const sides = [...touchesRef.current.values()];
-    const next = { left: sides.includes("left"), right: sides.includes("right") };
-    setHeld((previous) =>
-      previous.left === next.left && previous.right === next.right ? previous : next,
-    );
-  };
-
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     // Which half of the *screen* was touched, not which half of the table.
     // The table is a panel in the middle of a phone screen, so a thumb where
@@ -359,12 +349,10 @@ export default function Pinball() {
     // slide off it, and capturing would steal the taps meant for the buttons.
     const bounds = event.currentTarget.getBoundingClientRect();
     touchesRef.current.set(event.pointerId, touchSide(event.clientX, bounds.left, bounds.width));
-    syncHeld();
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     touchesRef.current.delete(event.pointerId);
-    syncHeld();
   };
 
   if (!open) return null;
@@ -407,15 +395,6 @@ export default function Pinball() {
             the lane, holding anywhere pulls the plunger. */}
         <div className="pinball-play">
           <canvas ref={canvasRef} className="pinball-table" />
-
-          <div className="pinball-pads">
-            <div className={`pinball-pad${held.left ? " is-held" : ""}`}>
-              {ready ? "HOLD TO PULL" : "◀ FLIP"}
-            </div>
-            <div className={`pinball-pad${held.right ? " is-held" : ""}`}>
-              {ready ? "LET GO TO FIRE" : "FLIP ▶"}
-            </div>
-          </div>
         </div>
 
         <div className="pinball-stats">
@@ -473,6 +452,9 @@ export default function Pinball() {
             ) : (
               <div className="pinball-hint">Drop all four targets for a multiplier</div>
             )}
+            <div className="pinball-hint pinball-hint--touch">
+              Tap either side of the screen to flip · hold to pull the plunger
+            </div>
             <div className="pinball-hint pinball-hint--keys">
               {ready ? "Hold SPACE to pull, let go to fire" : "← → or A/D flip"}
               <br />

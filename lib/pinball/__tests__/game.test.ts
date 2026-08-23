@@ -58,6 +58,41 @@ describe("the plunger", () => {
   });
 });
 
+describe("the plunger lane", () => {
+  it("does not let a ball fall back into it", () => {
+    // The way out of the lane must not be a way back in: a ball dropping down
+    // the lane has nothing to hit and takes the ball with it
+    const state = createGame();
+    state.status = "playing";
+    state.ball.p = { x: 297, y: 120 }; // over the lane, above the gate
+    state.ball.v = { x: 0, y: 260 };
+
+    for (let i = 0; i < 1.5 / STEP; i++) stepGame(state, idle, STEP, i * STEP);
+
+    // It may well carry on down — but into the playfield, off the tilt of the
+    // gate, rather than into the lane where nothing could be done about it
+    const inTheLane = state.ball.p.x > 282 && state.ball.p.y > 220;
+    expect(inTheLane).toBe(false);
+    expect(state.ballsLeft).toBe(BALLS_PER_GAME);
+  });
+
+  it("still lets a plunged ball ride up and out", () => {
+    const { state } = play(3, launchFor(1.2));
+    expect(state.ball.p.x).toBeLessThan(282); // out in the playfield
+  });
+
+  it("does not catch a ball on its way up", () => {
+    const state = createGame();
+    state.status = "playing";
+    state.ball.p = { x: 297, y: 300 };
+    state.ball.v = { x: 0, y: -700 };
+
+    for (let i = 0; i < 0.3 / STEP; i++) stepGame(state, idle, STEP, i * STEP);
+
+    expect(state.ball.p.y).toBeLessThan(180); // sailed past the gate
+  });
+});
+
 describe("the ball stays on the table", () => {
   it("never escapes through a wall, however hard it is hit", () => {
     // A full-power launch is the fastest the ball ever moves, and the walls
