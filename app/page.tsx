@@ -10,6 +10,7 @@ import WorkerSessionHistoryModal from "@/components/panel/WorkerSessionHistoryMo
 import GameHud from "@/components/hud/GameHud";
 import Sidebar from "@/components/hud/Sidebar";
 import { loadSidebarWidth } from "@/lib/persistence";
+import { useBackToClose } from "@/lib/hooks/useBackToClose";
 import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/constants";
 
 const PhaserGame = dynamic(() => import("@/components/game/PhaserGame"), {
@@ -39,6 +40,11 @@ export default function Page() {
   const sidebarOpen = sidebarChoice ?? wideEnough;
 
   const toggleSidebar = useCallback(() => setSidebarChoice(!sidebarOpen), [sidebarOpen]);
+  const closeSidebar = useCallback(() => setSidebarChoice(false), []);
+
+  // Only while it is a drawer over the office. Where it is a column beside
+  // the office it covers nothing, and back should still mean back.
+  useBackToClose(sidebarOpen && !wideEnough, closeSidebar);
 
   return (
     <ErrorBoundary>
@@ -60,7 +66,7 @@ export default function Page() {
             open={sidebarOpen}
             width={width ?? storedWidth}
             onWidthChange={setWidth}
-            onClose={() => setSidebarChoice(false)}
+            onClose={closeSidebar}
           />
 
           <TerminalModal />
