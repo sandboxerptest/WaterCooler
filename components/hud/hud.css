@@ -1517,3 +1517,82 @@
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* How many agents are at work, on the Tasks tab */
+.app-sidebar__count {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: var(--pixel-accent);
+  color: var(--pixel-bg);
+  font-size: 7px;
+}
+
+/* Tabs whose content is a plain list scroll inside the column */
+.app-sidebar__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+/* ── The trophy wall ───────────────────────────────────── */
+.badges {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--pixel-text);
+}
+
+.badges__count {
+  font-size: 8px;
+  color: var(--pixel-accent);
+  letter-spacing: 0.05em;
+}
+
+.badges__count--locked {
+  color: var(--pixel-muted);
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pixel-border);
+}
+
+.badges__empty,
+.badges__detail {
+  font-size: 8px;
+  line-height: 1.7;
+  color: var(--pixel-muted);
+}
+
+.badges__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  font-size: 8px;
+}
+
+/* Not yet won: shown, but plainly not theirs */
+.badges__row--locked {
+  opacity: 0.45;
+}
+
+.badges__icon {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.badges__title {
+  font-size: 8px;
+  line-height: 1.7;
+}
+
+.badges__who {
+  color: var(--pixel-accent);
+}
+
+.badges__when {
+  font-size: 8px;
+  color: var(--pixel-muted);
+  white-space: nowrap;
+}

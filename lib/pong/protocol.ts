@@ -49,6 +49,22 @@ export type PongPayload = PongInvite | PongReply | PongQuit | PongPaddle | PongS
 
 const KINDS = new Set(["invite", "accept", "decline", "quit", "paddle", "state"]);
 
+/** As long as a match id may be. Anything longer is not one of ours. */
+export const MAX_MATCH_ID = 64;
+
+/**
+ * Name a match, briefly.
+ *
+ * Player ids are uuids, and two of them joined together with a counter comes
+ * to 75 characters — past the length the relay accepts, so every real
+ * challenge was dropped as malformed while the short ids in the tests sailed
+ * through. A prefix of each is plenty: the pair only has to tell one match
+ * between these two players from the next.
+ */
+export function makeMatchId(from: string, to: string, sequence: number): string {
+  return `${from.slice(0, 8)}-${to.slice(0, 8)}-${sequence}`;
+}
+
 /**
  * Enough of a check to relay safely.
  *
@@ -59,5 +75,5 @@ export function isPongPayload(value: unknown): value is PongPayload {
   if (typeof value !== "object" || value === null) return false;
   const payload = value as { kind?: unknown; matchId?: unknown };
   if (typeof payload.kind !== "string" || !KINDS.has(payload.kind)) return false;
-  return typeof payload.matchId === "string" && payload.matchId.length <= 64;
+  return typeof payload.matchId === "string" && payload.matchId.length <= MAX_MATCH_ID;
 }

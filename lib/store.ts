@@ -14,7 +14,9 @@ import React from "react";
 import type { SeatState, TaskItem, GatewayConfig, ChatMessage } from "@/types/game";
 import type { StudioSnapshot } from "@/types/game";
 import { gameEvents } from "./events";
-import { type PersistedSeatConfig, loadGatewayConfig } from "./persistence";
+import { type PersistedSeatConfig, loadGatewayConfig, loadPlayerName } from "./persistence";
+import { say } from "./room-speech";
+import type { SayScope } from "./presence-types";
 import { fetchRoomSnapshot, flushRoomWrites, saveRoomPatch } from "./room-client";
 import {
   type Action,
@@ -46,6 +48,8 @@ interface StudioContextValue {
   newSessionForSeat: (seatId: string) => void;
   getBoundSessionForSeat: (seatId: string) => string | undefined;
   loadSessionChat: (sessionKey: string) => Promise<ChatMessage[]>;
+  /** Say something to the room, and keep it in the chat log. */
+  sayInRoom: (text: string, scope?: SayScope) => void;
 }
 
 const StudioContext = createContext<StudioContextValue | null>(null);
@@ -343,6 +347,33 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     dispatchRef.current({ type: "UPDATE_SEAT_CONFIG", seatId, patch });
   }, []);
 
+  /**
+   * Say something out loud, and put it in the chat log with everything else.
+   *
+   * The server relays speech to everyone else and deliberately does not echo
+   * it back to the speaker, so without this your own words appear over your
+   * character and nowhere else — leaving the log reading as though everyone
+   * were talking at you rather than with you.
+   */
+  const sayInRoom = useCallback((text: string, scope: SayScope = "room") => {
+    const trimmed = text.trim().slice(0, 500);
+    if (!trimmed || !say(trimmed, scope)) return;
+
+    dispatchRef.current({
+      type: "UPSERT_CHAT",
+      message: {
+        id: `said-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        runId: "",
+        role: "player",
+        content: trimmed,
+        actorName: loadPlayerName(),
+        timestamp: new Date().toISOString(),
+        sessionKey: MAIN_SESSION_KEY,
+        roomChat: true,
+      } as ChatMessage,
+    });
+  }, []);
+
   return React.createElement(
     StudioContext.Provider,
     {
@@ -358,6 +389,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         newSessionForSeat: session.newSessionForSeat,
         getBoundSessionForSeat: session.getBoundSessionForSeat,
         loadSessionChat: session.loadSessionChat,
+        sayInRoom,
       },
     },
     children,

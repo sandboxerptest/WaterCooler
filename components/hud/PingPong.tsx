@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { onRoomMessage, sendRoom } from "@/lib/room-socket";
 import { getSelfId } from "@/lib/presence-self";
+import { getPlayers } from "@/lib/presence-roster";
 import type { PresencePlayer } from "@/lib/presence-types";
 import {
   BALL_RADIUS,
@@ -22,7 +23,7 @@ import {
   type Side,
 } from "@/lib/pong/game";
 import { opponentMove, type Difficulty } from "@/lib/pong/opponent";
-import type { PongPayload } from "@/lib/pong/protocol";
+import { makeMatchId, type PongPayload } from "@/lib/pong/protocol";
 
 /**
  * Ping pong at the water bucket.
@@ -102,7 +103,9 @@ function tableYFromPointer(event: React.PointerEvent<HTMLElement>): number {
 export default function PingPong() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>({ at: "menu" });
-  const [players, setPlayers] = useState<PresencePlayer[]>([]);
+  // Starts from whoever is already here: the roster is announced as it
+  // changes, and a panel opened in a quiet moment would otherwise see nobody
+  const [players, setPlayers] = useState<PresencePlayer[]>(getPlayers);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [display, setDisplay] = useState({
     left: 0,
@@ -148,6 +151,10 @@ export default function PingPong() {
     const unsubscribe = gameEvents.on("open-pingpong", () => {
       setMode({ at: "menu" });
       gameRef.current = null;
+      // Who is here, read at the moment the menu opens. The roster is
+      // announced as it changes and this panel is mounted from the start, so
+      // waiting to be told means an empty list until somebody moves.
+      setPlayers(getPlayers());
       setOpen(true);
     });
     if (new URLSearchParams(window.location.search).get("pingpong") === "1") {
@@ -156,6 +163,8 @@ export default function PingPong() {
     return unsubscribe;
   }, []);
 
+  // The initial state above reads whoever is already here, so this only has
+  // to carry the changes from then on
   useEffect(() => gameEvents.on("presence-updated", setPlayers), []);
 
   // ── Everything the other player sends ──
@@ -369,7 +378,7 @@ export default function PingPong() {
     // Counted rather than timed: the pair of player ids already makes this
     // unique between browsers, so a counter is enough to tell one challenge
     // from the next — and it keeps the render pure
-    const matchId = `${getSelfId() ?? "me"}-${player.id}-${(challengeCount.current += 1)}`;
+    const matchId = makeMatchId(getSelfId() ?? "me", player.id, (challengeCount.current += 1));
     send(player.id, { kind: "invite", matchId });
     setMode({ at: "waiting", matchId, against: player });
   };

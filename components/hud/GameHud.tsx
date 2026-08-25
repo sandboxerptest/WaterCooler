@@ -5,15 +5,12 @@ import "./hud.css";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useStudio } from "@/lib/store";
-import { isVisibleChatMessage } from "@/lib/constants";
-import { MAIN_SESSION_KEY } from "@/lib/reducer";
 import { useBgm } from "@/lib/useBgm";
 import { loadOnboardingDone, loadGatewayConfig, saveOnboardingDone } from "@/lib/persistence";
 import type { HudDockItem, HudPanelId } from "./HudDock";
 import TopBar from "./TopBar";
 import BottomBar from "./BottomBar";
 import ConnectionPanel from "./ConnectionPanel";
-import TaskPanel from "./TaskPanel";
 import WorkerPanel from "./WorkerPanel";
 import SeatManagerModal from "./SeatManagerModal";
 import MusicControls from "./MusicControls";
@@ -91,19 +88,6 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
     };
   }, []);
 
-  const activeSessionKey = state.activeSessionKey ?? MAIN_SESSION_KEY;
-  const visibleTasks = useMemo(
-    () => state.tasks.filter((task) => task.sessionKey === activeSessionKey),
-    [activeSessionKey, state.tasks],
-  );
-  const visibleMessages = useMemo(
-    () =>
-      state.chatMessages.filter(
-        (message) => message.sessionKey === activeSessionKey && isVisibleChatMessage(message),
-      ),
-    [activeSessionKey, state.chatMessages],
-  );
-
   // Top-right toolbar items (everything except chat)
   const toolItems: HudDockItem[] = useMemo(
     () => [
@@ -118,12 +102,6 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
         label: "Connection",
         icon: "/ui/icons/icon-connection.png",
         iconActive: "/ui/icons/icon-connection-active.png",
-      },
-      {
-        id: "tasks",
-        label: "Tasks",
-        icon: "/ui/icons/icon-tasks.png",
-        iconActive: "/ui/icons/icon-tasks-active.png",
       },
       {
         id: "workers",
@@ -172,7 +150,6 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
         <div className="hud-topright-flyout">
           {openPanel === "music" ? <MusicControls bgm={bgm} /> : null}
           {openPanel === "connection" ? <ConnectionPanel /> : null}
-          {openPanel === "tasks" ? <TaskPanel tasks={visibleTasks} /> : null}
           {openPanel === "workers" ? (
             <WorkerPanel seats={state.seats} onOpenManager={() => setSeatManagerOpen(true)} />
           ) : null}

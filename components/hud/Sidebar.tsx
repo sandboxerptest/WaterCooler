@@ -9,6 +9,8 @@ import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/l
 import { saveSidebarWidth } from "@/lib/persistence";
 import ChatPanel from "./ChatPanel";
 import ActivityPanel from "./ActivityPanel";
+import { TaskList } from "./TaskPanel";
+import AchievementsPanel from "./AchievementsPanel";
 
 /**
  * The column that stays.
@@ -19,7 +21,7 @@ import ActivityPanel from "./ActivityPanel";
  * Here it has a home of its own, alongside the office rather than on top of it.
  */
 
-export type SidebarTab = "chat" | "activity";
+export type SidebarTab = "chat" | "activity" | "tasks" | "badges";
 
 interface SidebarProps {
   open: boolean;
@@ -34,10 +36,18 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
   const draggingRef = useRef(false);
 
   const activeSessionKey = state.activeSessionKey ?? MAIN_SESSION_KEY;
+  // Room talk stays in view whichever session is being read: the person you
+  // are talking to may well be looking at a different one
   const messages = state.chatMessages.filter(
-    (message) => message.sessionKey === activeSessionKey && isVisibleChatMessage(message),
+    (message) =>
+      (message.roomChat || message.sessionKey === activeSessionKey) &&
+      isVisibleChatMessage(message),
   );
   const tasks = state.tasks.filter((task) => task.sessionKey === activeSessionKey);
+  /** The Tasks tab is about the room, so it shows the lot. */
+  const busyCount = state.tasks.filter((task) =>
+    ["running", "submitted", "queued", "returning"].includes(task.status),
+  ).length;
 
   // ── Dragging the edge ──
   const startDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -132,6 +142,21 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
           </button>
           <button
             type="button"
+            className={`app-sidebar__tab${tab === "tasks" ? " is-active" : ""}`}
+            onClick={() => setTab("tasks")}
+          >
+            Tasks
+            {busyCount > 0 && <span className="app-sidebar__count">{busyCount}</span>}
+          </button>
+          <button
+            type="button"
+            className={`app-sidebar__tab${tab === "badges" ? " is-active" : ""}`}
+            onClick={() => setTab("badges")}
+          >
+            Badges
+          </button>
+          <button
+            type="button"
             className="app-sidebar__collapse"
             onClick={onClose}
             title="Hide the panel"
@@ -150,8 +175,14 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
               sessions={state.sessions}
               activeSessionKey={state.activeSessionKey}
             />
-          ) : (
+          ) : tab === "activity" ? (
             <ActivityPanel />
+          ) : tab === "tasks" ? (
+            <div className="app-sidebar__scroll">
+              <TaskList tasks={state.tasks} />
+            </div>
+          ) : (
+            <AchievementsPanel />
           )}
         </div>
       </div>

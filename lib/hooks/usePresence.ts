@@ -7,6 +7,7 @@ import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
 import { rememberSelfId } from "../presence-self";
+import { rememberPlayers } from "../presence-roster";
 import { MOVE_SEND_MS, type Facing, type PresencePlayer } from "../presence-types";
 
 const log = createLogger("Presence");
@@ -35,6 +36,7 @@ export function usePresence() {
     /** Hand the scene everyone except ourselves. */
     const publish = (players: PresencePlayer[]) => {
       const others = players.filter((player) => player.id !== selfIdRef.current);
+      rememberPlayers(others);
       gameEvents.emit("presence-updated", others);
       gameEvents.emit("presence-count", players.length, capacityRef.current);
     };

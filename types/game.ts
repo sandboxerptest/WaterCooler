@@ -80,6 +80,15 @@ export interface ChatMessageBase {
   timestamp: string;
   sessionKey: string;
   actorName?: string;
+  /**
+   * Said out loud to the room rather than to an agent.
+   *
+   * Conversation is filed under the session it belongs to, but talking to the
+   * people in the room belongs to the room: it stays in view whichever
+   * session is being read, because the person you are talking to may well be
+   * looking at a different one.
+   */
+  roomChat?: boolean;
 }
 
 interface TextChatMessage extends ChatMessageBase {

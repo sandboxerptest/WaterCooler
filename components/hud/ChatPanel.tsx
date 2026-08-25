@@ -9,7 +9,6 @@ import { gameEvents } from "@/lib/events";
 import type { ChatMessage, SessionRecord, TaskItem } from "@/types/game";
 import { findTask } from "@/lib/reducer";
 import HudFlyout from "./HudFlyout";
-import { say } from "@/lib/room-speech";
 import MessageBubble from "./MessageBubble";
 import SessionSwitcher from "./SessionSwitcher";
 
@@ -26,7 +25,7 @@ export default function ChatPanel({
   sessions: SessionRecord[];
   activeSessionKey?: string;
 }) {
-  const { assignTask } = useStudio();
+  const { assignTask, sayInRoom } = useStudio();
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -74,7 +73,7 @@ export default function ChatPanel({
     if (mode === "say") {
       // Talking to the people in the room, not to an agent — this works even
       // when the agent bridge is down, because it needs nobody's API key
-      say(trimmed, scope);
+      sayInRoom(trimmed, scope);
       setInput("");
       requestAnimationFrame(() => inputRef.current?.focus());
       return;

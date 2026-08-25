@@ -92,6 +92,7 @@ export function useWorldSync(refs: WorldSyncRefs) {
             actorName: message.from.name,
             timestamp: message.at,
             sessionKey: refs.activeSessionKey.current ?? "main",
+            roomChat: true,
           } as ChatMessage,
         });
         gameEvents.emit("player-said", message.from.id, message.text);
