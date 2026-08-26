@@ -44,7 +44,11 @@ export const WORKER_SPRITES: WorkerSpriteConfig[] = [
   { key: "character_03", path: "/characters/Premade_Character_48x48_03.png", label: "Bob" },
   { key: "character_04", path: "/characters/Premade_Character_48x48_04.png", label: "Carol" },
   { key: "character_05", path: "/characters/Premade_Character_48x48_05.png", label: "Dave" },
-  { key: "character_yoshi", path: "/characters/Yoshi_Character_48x48.png", label: "Yoshi" },
+  // Yoshi is waiting on a sheet that slices cleanly. The one built from the
+  // source has frames spliced across row boundaries — the rows in it fuse
+  // where a head reaches into the row above, so cutting them at an even
+  // spacing runs through the characters. Put this line back when it is fixed.
+  // { key: "character_yoshi", path: "/characters/Yoshi_Character_48x48.png", label: "Yoshi" },
 ];
 
 const directions = ["right", "up", "left", "down"] as const;
