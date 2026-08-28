@@ -9,10 +9,19 @@ import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import next from "next";
 import { createLogger } from "./lib/logger";
 import { attachWsProxy } from "./lib/ws-proxy";
-import { attachCliBridge, dispatchToWorker, validateDispatchSecret } from "./lib/cli-bridge";
+import {
+  attachCliBridge,
+  dispatchToWorker,
+  getWorkerRoster,
+  validateDispatchSecret,
+} from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
 import { attachPresenceSocket } from "./lib/server/presence-socket";
 import { ERP_DB_PATH, isEmpty, openErpDb, seedErpDatabase } from "./lib/erp/db";
+import { DEFAULT_ROOM_SLUG } from "./lib/rooms";
+import { readMettaraConfig } from "./lib/mettara/config";
+import { buildOfficeTools } from "./lib/mettara/office-tools";
+import { createToolsHandler, TOOLS_PATH } from "./lib/mettara/webhook";
 
 const log = createLogger("Server");
 
@@ -80,6 +89,27 @@ function handleDispatch(req: IncomingMessage, res: ServerResponse) {
   });
 }
 
+// ── Inbound tool endpoint for Mettara AIs ──
+
+/**
+ * Mettara AIs reach back into the office through one signed endpoint. It is
+ * only mounted when the platform credentials are present: without a secret
+ * there is nothing to verify signatures against, and an unauthenticated door
+ * into worker dispatch is not one worth opening.
+ */
+function buildMettaraTools() {
+  const config = readMettaraConfig();
+  if (!config) return null;
+  return createToolsHandler({
+    secret: config.apiSecret,
+    registry: buildOfficeTools({
+      listWorkers: (room) => getWorkerRoster(room),
+      dispatch: (seatId, task, room) => dispatchToWorker(seatId, task, room),
+      defaultRoom: DEFAULT_ROOM_SLUG,
+    }),
+  });
+}
+
 // ── Seat config sync for auggie worker roster ──
 
 /**
@@ -114,11 +144,16 @@ app
   .prepare()
   .then(() => {
     ensureErpData();
+    const mettaraTools = CLI_PROVIDER ? buildMettaraTools() : null;
     const server = createServer((req, res) => {
       // Intercept internal API routes before Next.js
       if (CLI_PROVIDER) {
         if (req.url === "/api/internal/dispatch") {
           handleDispatch(req, res);
+          return;
+        }
+        if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
+          void mettaraTools(req, res);
           return;
         }
       }
@@ -132,7 +167,12 @@ app
     if (CLI_PROVIDER) {
       attachCliBridge(server, CLI_PROVIDER);
       log.info(`Ready on http://localhost:${port}`);
-      log.info(`Provider: ${CLI_PROVIDER.displayName} (bridging via ${CLI_PROVIDER.binName} CLI)`);
+      log.info(
+        CLI_PROVIDER.kind === "service"
+          ? `Provider: ${CLI_PROVIDER.displayName} (hosted service)`
+          : `Provider: ${CLI_PROVIDER.displayName} (bridging via ${CLI_PROVIDER.binName} CLI)`,
+      );
+      if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
     } else {
       attachWsProxy(server, GATEWAY_URL);
       log.info(`Ready on http://localhost:${port}`);

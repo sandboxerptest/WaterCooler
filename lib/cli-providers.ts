@@ -1,17 +1,26 @@
 /**
- * CLI provider descriptors.
+ * Agent provider descriptors.
  *
- * A CLI provider backs the emulated OpenClaw gateway (see cli-bridge.ts) by
- * spawning a local agent CLI per run. Each descriptor owns exactly two things:
- * how to build the argv for a run, and how to read the result back out of
- * stdout. The bridge stays provider-agnostic.
+ * A provider backs the emulated OpenClaw gateway (see cli-bridge.ts) by
+ * answering one run at a time. Two kinds exist:
+ *
+ *   "cli"     — spawns a local agent CLI. The descriptor owns exactly two
+ *               things: how to build the argv, and how to read the result back
+ *               out of stdout.
+ *   "service" — calls a hosted API in process. The descriptor owns a single
+ *               `run` that resolves to the same parsed result.
+ *
+ * Either way the bridge stays provider-agnostic: it hands over a CliRunOptions
+ * and gets a CliParsedResult back.
  */
 
 import { accessSync, constants, mkdirSync } from "fs";
 import { delimiter, isAbsolute, join } from "path";
 import { homedir } from "os";
+import { DEFAULT_AI_NAME, mettaraPreflight } from "./mettara/config";
+import { runMettaraTurn } from "./mettara/client";
 
-export type CliProviderId = "auggie" | "claude" | "claude-api";
+export type CliProviderId = "auggie" | "claude" | "claude-api" | "mettara";
 
 export interface ModelChoice {
   id: string;
@@ -32,6 +41,10 @@ export interface CliRunOptions {
   model?: string;
   /** Sandbox directory this seat runs in (providers that support it). */
   workspaceDir?: string;
+  /** Seat name, for providers that carry an identity per worker. */
+  seatLabel?: string;
+  /** Bridge session key — one conversation per seat. */
+  sessionKey?: string;
 }
 
 export interface CliRunSpec {
@@ -52,12 +65,14 @@ export interface CliParsedResult {
 
 export interface CliProvider {
   id: CliProviderId;
+  /** How the bridge reaches this provider. Absent means "cli". */
+  kind?: "cli" | "service";
   /** Name shown in the HUD and logs. */
   displayName: string;
-  /** Executable to look for on PATH. */
-  binName: string;
+  /** Executable to look for on PATH. Service providers have none. */
+  binName?: string;
   /** Env var that overrides the resolved executable path. */
-  binEnvVar: string;
+  binEnvVar?: string;
   /** Whether each seat gets its own sandbox directory. */
   usesWorkspaces: boolean;
   /** Hint shown in the connection panel when the CLI is missing. */
@@ -68,8 +83,12 @@ export interface CliProvider {
    * say so in the worker's bubble, not fail as an opaque exit code.
    */
   preflight?(): string | null;
-  buildRun(opts: CliRunOptions): CliRunSpec;
-  parseResult(raw: string): CliParsedResult | null;
+  /** Builds the argv for a run. Required for "cli" providers. */
+  buildRun?(opts: CliRunOptions): CliRunSpec;
+  /** Reads the result out of stdout. Required for "cli" providers. */
+  parseResult?(raw: string): CliParsedResult | null;
+  /** Takes one turn in process. Required for "service" providers. */
+  run?(opts: CliRunOptions): Promise<CliParsedResult>;
   /** Argv for enumerating models, when the CLI can report them. */
   modelsCommand?: string[];
   /** Fallback list when the CLI cannot report models. */
@@ -87,7 +106,11 @@ export interface CliProvider {
  * back to the bare name so spawn errors stay readable.
  */
 export function resolveBin(provider: CliProvider): string {
-  const override = process.env[provider.binEnvVar];
+  // Service providers have no binary; nothing should be asking, but returning
+  // an empty string keeps a mistake a readable spawn error rather than a throw.
+  if (!provider.binName) return "";
+
+  const override = provider.binEnvVar ? process.env[provider.binEnvVar] : undefined;
   if (override) return override;
 
   const searchPaths = [
@@ -315,7 +338,7 @@ const claudeApiProvider: CliProvider = {
   },
 
   buildRun(options) {
-    const spec = claudeProvider.buildRun(options);
+    const spec = claudeProvider.buildRun!(options);
 
     // --bare makes the API key the only credential: OAuth and the keychain are
     // never read. Without it the CLI happily falls back to whatever account is
@@ -337,17 +360,58 @@ const claudeApiProvider: CliProvider = {
   ],
 };
 
+// ── Mettara ────────────────────────────────────────────
+
+/**
+ * Mettara Connect: agents run on our partner's hosted AI rather than on a
+ * local CLI. There is no binary to install and no sandbox directory — a turn
+ * is an API call — so this is the first "service" provider and the bridge
+ * takes its `run` path instead of spawning.
+ *
+ * Mettara names its assistants by technical name, not by model id, so the
+ * HUD's model field selects which AI a seat talks to.
+ */
+const mettaraProvider: CliProvider = {
+  id: "mettara",
+  kind: "service",
+  displayName: "Mettara AI",
+  usesWorkspaces: false,
+  setupHint: "Set METTARA_API_SECRET and METTARA_PLATFORM_ID, and install the Mettara SDK tarball.",
+
+  preflight() {
+    return mettaraPreflight();
+  },
+
+  async run(options) {
+    const reply = await runMettaraTurn({
+      seatLabel: options.seatLabel,
+      sessionKey: options.sessionKey ?? "default",
+      message: options.message,
+      personality: options.personality,
+      conversationId: options.sessionId,
+      aiName: options.model,
+    });
+    // The conversation id rides home as the session id, so the bridge's
+    // existing sessionKey map resumes this seat's thread on its next turn
+    // exactly as it resumes a Claude CLI session.
+    return { text: reply.text, sessionId: reply.conversationId };
+  },
+
+  staticModels: [{ id: DEFAULT_AI_NAME, provider: "mettara" }],
+};
+
 // ── Registry ───────────────────────────────────────────
 
 const PROVIDERS: Record<CliProviderId, CliProvider> = {
   auggie: auggieProvider,
   claude: claudeProvider,
   "claude-api": claudeApiProvider,
+  mettara: mettaraProvider,
 };
 
 /** True when the configured provider is CLI-backed rather than a real gateway. */
 export function isCliProviderId(value: string | undefined): value is CliProviderId {
-  return value === "auggie" || value === "claude" || value === "claude-api";
+  return value === "auggie" || value === "claude" || value === "claude-api" || value === "mettara";
 }
 
 export function getCliProvider(id: CliProviderId): CliProvider {

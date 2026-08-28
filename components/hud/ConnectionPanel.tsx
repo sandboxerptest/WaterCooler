@@ -3,13 +3,19 @@
 import { useState } from "react";
 import { useStudio } from "@/lib/store";
 import { LS_CONFIG, STATUS_LABELS } from "@/lib/constants";
-import { parseGatewayAddress, isCliProvider, getProviderLabel } from "@/lib/utils";
+import {
+  parseGatewayAddress,
+  isCliProvider,
+  getProviderLabel,
+  getProviderSetupHint,
+} from "@/lib/utils";
 import HudFlyout from "./HudFlyout";
 
 const DEFAULT_GATEWAY = "ws://127.0.0.1:18789";
 const DEFAULT_TOKEN = process.env.NEXT_PUBLIC_GATEWAY_TOKEN ?? "";
 const IS_CLI = isCliProvider();
 const PROVIDER_LABEL = getProviderLabel();
+const SETUP_HINT = getProviderSetupHint();
 
 function loadSavedConfig(): { url: string; token: string } {
   try {
@@ -97,7 +103,7 @@ export default function ConnectionPanel() {
         )}
         {IS_CLI && !isConnected && !isConnecting && (
           <p style={{ color: "var(--pixel-muted)", fontSize: "8px" }}>
-            Using {PROVIDER_LABEL} as agent provider. Make sure the CLI is installed and signed in.
+            Using {PROVIDER_LABEL} as agent provider. {SETUP_HINT}
           </p>
         )}
         {isAuthFailed && !error && (

@@ -27,6 +27,7 @@ import {
   getCliProvider,
   parseJsonObject,
   resolveBin,
+  type CliParsedResult,
   type CliProvider,
   type ModelChoice,
 } from "./cli-providers";
@@ -57,7 +58,7 @@ const clients = new Set<ClientState>();
  * whose scene had not populated seats yet would publish an empty roster,
  * silently stripping the main agent's ability to delegate.
  */
-function getWorkerRoster(room: string): WorkerInfo[] {
+export function getWorkerRoster(room: string): WorkerInfo[] {
   try {
     const seats = getRoomStore().getSnapshot(room).seats as Array<{
       seatId?: string;
@@ -378,7 +379,8 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   });
 
   const startedAt = Date.now();
-  const spec = provider.buildRun({
+  const seatLabel = params.seatLabel as string | undefined;
+  const runOptions = {
     message,
     personality: buildPersonality(state.room, params),
     sessionId: state.sessionMap.get(sessionKey),
@@ -386,9 +388,44 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
     mcpConfigPath: writeMcpConfig(state.room),
     model: (params.model as string | undefined) ?? process.env.WATERCOOLER_MODEL,
     workspaceDir: provider.usesWorkspaces
-      ? ensureSeatWorkspace((params.seatLabel as string | undefined) ?? sessionKey, state.room)
+      ? ensureSeatWorkspace(seatLabel ?? sessionKey, state.room)
       : undefined,
-  });
+    seatLabel,
+    sessionKey,
+  };
+
+  // Both kinds of run end the same way, so the reporting — spend, activity,
+  // achievements, session mapping, the final bubble — lives in one place.
+  const finish = (parsed: CliParsedResult | null, failure: string | null) =>
+    finishRun({ state, params, runId, sessionKey, message, startedAt, parsed, failure });
+
+  // A service provider has no process to spawn: it answers in place.
+  if (provider.kind === "service") {
+    if (!provider.run) {
+      finish(null, `${provider.displayName} has no run implementation.`);
+      return;
+    }
+    log.info(`Calling ${provider.displayName} for run ${runId}`);
+    runningCount += 1;
+    provider
+      .run(runOptions)
+      .then((parsed) => {
+        runningCount = Math.max(0, runningCount - 1);
+        finish(parsed, null);
+      })
+      .catch((err: unknown) => {
+        runningCount = Math.max(0, runningCount - 1);
+        finish(null, (err as Error)?.message ?? String(err));
+      });
+    return;
+  }
+
+  if (!provider.buildRun || !provider.parseResult) {
+    finish(null, `${provider.displayName} has no CLI implementation.`);
+    return;
+  }
+
+  const spec = provider.buildRun(runOptions);
 
   log.info(`Spawning ${provider.displayName} for run ${runId} in ${spec.cwd ?? process.cwd()}`);
 
@@ -474,94 +511,104 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
     if (timedOut) return;
 
     if (code === null || code !== 0) {
-      const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
-      log.error(`${provider.binName} failed for run ${runId}:`, errMsg);
-      sendEvent(state, "agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "error", error: errMsg },
-      });
-      sendEvent(state, "chat", { runId, sessionKey, state: "error" });
+      finish(null, stderr.trim() || `${provider.binName} exited with code ${code}`);
       return;
     }
 
-    const parsed = provider.parseResult(stdout);
+    const parsed = provider.parseResult!(stdout);
     if (!parsed) {
       log.error(
         `${provider.binName} produced unparseable output for run ${runId}:`,
         stdout.slice(0, 500),
       );
-      sendEvent(state, "agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "error", error: `Failed to parse ${provider.displayName} output` },
-      });
-      sendEvent(state, "chat", { runId, sessionKey, state: "error" });
+      finish(null, `Failed to parse ${provider.displayName} output`);
       return;
     }
 
-    recordSpend(state.room, parsed);
+    finish(parsed, null);
+  });
+}
 
-    const seconds = Math.round((Date.now() - startedAt) / 100) / 10;
-    recordActivity(state.room, {
-      kind: "agent",
-      actor: (params.seatLabel as string | undefined) ?? "An agent",
-      text: `answered: ${message.slice(0, 120)}`,
-      detail: parsed.costUsd ? `${seconds}s · $${parsed.costUsd.toFixed(4)}` : `${seconds}s`,
-    });
+/**
+ * Reports the end of a run, however it ran.
+ *
+ * `failure` set means the run never produced an answer — a non-zero exit, an
+ * unreadable reply, a service that refused. `parsed.isError` means the
+ * provider ran and declined the turn. Both end as an error bubble rather than
+ * as speech, so a person can see what went wrong instead of an agent
+ * narrating it.
+ */
+function finishRun(args: {
+  state: ClientState;
+  params: Record<string, unknown>;
+  runId: string;
+  sessionKey: string;
+  message: string;
+  startedAt: number;
+  parsed: CliParsedResult | null;
+  failure: string | null;
+}) {
+  const { state, params, runId, sessionKey, message, startedAt, parsed } = args;
 
-    announceAchievements(state.room, {
-      room: state.room,
-      seatId: params.seatId as string | undefined,
-      seatLabel: (params.seatLabel as string | undefined) ?? "Someone",
-      durationMs: Date.now() - startedAt,
-      costUsd: parsed.costUsd,
-      dispatched: false,
-      humansPresent: humansInRoom(state.room),
-    });
-
-    // Store the CLI session id so the next message to this seat resumes it
-    if (parsed.sessionId) {
-      state.sessionMap.set(sessionKey, parsed.sessionId);
-      log.debug(`Mapped sessionKey ${sessionKey} → ${provider.id} session ${parsed.sessionId}`);
-    }
-
-    // A zero exit code with is_error set means the CLI ran but refused the turn
-    // (not logged in, quota, invalid model). Surface it instead of speaking it.
-    if (parsed.isError) {
-      log.error(`${provider.displayName} returned an error for run ${runId}: ${parsed.text}`);
-      sendEvent(state, "agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "error", error: parsed.text },
-      });
-      sendEvent(state, "chat", { runId, sessionKey, state: "error" });
-      return;
-    }
-
-    const responseText = parsed.text;
-
-    // Lifecycle end
+  const fail = (error: string) => {
+    log.error(`Run ${runId} failed: ${error}`);
     sendEvent(state, "agent", {
       runId,
       sessionKey,
       stream: "lifecycle",
-      data: { phase: "end" },
+      data: { phase: "error", error },
     });
+    sendEvent(state, "chat", { runId, sessionKey, state: "error" });
+  };
 
-    // Final chat message
-    sendEvent(state, "chat", {
-      runId,
-      sessionKey,
-      state: "final",
-      message: { content: [{ type: "text", text: responseText }] },
-    });
+  if (args.failure || !parsed) {
+    fail(args.failure ?? `${provider.displayName} returned nothing`);
+    return;
+  }
 
-    log.info(`Run ${runId} completed successfully`);
+  recordSpend(state.room, parsed);
+
+  const seconds = Math.round((Date.now() - startedAt) / 100) / 10;
+  recordActivity(state.room, {
+    kind: "agent",
+    actor: (params.seatLabel as string | undefined) ?? "An agent",
+    text: `answered: ${message.slice(0, 120)}`,
+    detail: parsed.costUsd ? `${seconds}s · $${parsed.costUsd.toFixed(4)}` : `${seconds}s`,
   });
+
+  announceAchievements(state.room, {
+    room: state.room,
+    seatId: params.seatId as string | undefined,
+    seatLabel: (params.seatLabel as string | undefined) ?? "Someone",
+    durationMs: Date.now() - startedAt,
+    costUsd: parsed.costUsd,
+    dispatched: false,
+    humansPresent: humansInRoom(state.room),
+  });
+
+  // Store the provider session id so the next message to this seat resumes it
+  if (parsed.sessionId) {
+    state.sessionMap.set(sessionKey, parsed.sessionId);
+    log.debug(`Mapped sessionKey ${sessionKey} → ${provider.id} session ${parsed.sessionId}`);
+  }
+
+  // A clean run with is_error set means the provider ran but refused the turn
+  // (not logged in, quota, invalid model). Surface it instead of speaking it.
+  if (parsed.isError) {
+    fail(parsed.text);
+    return;
+  }
+
+  sendEvent(state, "agent", { runId, sessionKey, stream: "lifecycle", data: { phase: "end" } });
+
+  sendEvent(state, "chat", {
+    runId,
+    sessionKey,
+    state: "final",
+    message: { content: [{ type: "text", text: parsed.text }] },
+  });
+
+  log.info(`Run ${runId} completed successfully`);
 }
 
 // ── Chat abort handler ─────────────────────────────────
@@ -822,7 +869,7 @@ export function dispatchToWorker(
 
     // Resume this seat's own session if it has run before
     const seatSessionKey = `dispatch:${seatId}`;
-    const spec = provider.buildRun({
+    const runOptions = {
       message: task,
       personality: buildPersonality(room, { seatLabel: seat.label, seatRole: seat.roleTitle }),
       sessionId: dispatchSessions.get(seatSessionKey),
@@ -830,10 +877,105 @@ export function dispatchToWorker(
       mcpConfigPath: null,
       model: process.env.WATERCOOLER_MODEL,
       workspaceDir: provider.usesWorkspaces ? ensureSeatWorkspace(seat.label, room) : undefined,
-    });
+      seatLabel: seat.label,
+      sessionKey: seatSessionKey,
+    };
 
     log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
     const startedAt = Date.now();
+
+    /**
+     * Reports a finished delegation, whichever kind of provider ran it.
+     * `rawFallback` is the CLI's stdout, used when the output could not be
+     * parsed but still holds something worth showing.
+     */
+    const complete = (parsed: CliParsedResult | null, failure: string | null, rawFallback = "") => {
+      if (failure) {
+        log.error(`dispatch failed for run ${runId}:`, failure);
+        broadcastEvent("agent", {
+          runId,
+          sessionKey,
+          stream: "lifecycle",
+          data: { phase: "error", error: failure },
+        });
+        resolve({ result: "", error: failure });
+        return;
+      }
+
+      recordSpend(room, parsed);
+      announceAchievements(room, {
+        room,
+        seatId,
+        seatLabel: seat.label,
+        durationMs: Date.now() - startedAt,
+        costUsd: parsed?.costUsd,
+        // Work that arrived here came from another agent, not a person
+        dispatched: true,
+        humansPresent: humansInRoom(room),
+      });
+      const responseText = parsed ? parsed.text : rawFallback;
+
+      // Store session for future resume
+      if (parsed?.sessionId) {
+        dispatchSessions.set(seatSessionKey, parsed.sessionId);
+      }
+
+      if (parsed?.isError) {
+        log.error(`Dispatch to ${seat.label} returned an error: ${responseText}`);
+        broadcastEvent("agent", {
+          runId,
+          sessionKey,
+          stream: "lifecycle",
+          data: { phase: "error", error: responseText },
+        });
+        resolve({ result: "", error: responseText });
+        return;
+      }
+
+      // Emit lifecycle end + final chat for frontend
+      broadcastEvent("agent", {
+        runId,
+        sessionKey,
+        stream: "lifecycle",
+        data: { phase: "end" },
+      });
+      broadcastEvent("chat", {
+        runId,
+        sessionKey,
+        state: "final",
+        message: { content: [{ type: "text", text: responseText }] },
+      });
+
+      log.info(`Dispatch to ${seat.label} completed (run ${runId})`);
+      resolve({ result: responseText });
+    };
+
+    // A service provider answers in place — there is no child to watch.
+    if (provider.kind === "service") {
+      if (!provider.run) {
+        complete(null, `${provider.displayName} has no run implementation.`);
+        return;
+      }
+      runningCount += 1;
+      provider
+        .run(runOptions)
+        .then((parsed) => {
+          runningCount = Math.max(0, runningCount - 1);
+          complete(parsed, null);
+        })
+        .catch((err: unknown) => {
+          runningCount = Math.max(0, runningCount - 1);
+          complete(null, (err as Error)?.message ?? String(err));
+        });
+      return;
+    }
+
+    if (!provider.buildRun || !provider.parseResult) {
+      complete(null, `${provider.displayName} has no CLI implementation.`);
+      return;
+    }
+
+    const spec = provider.buildRun(runOptions);
 
     runningCount += 1;
     let child: ChildProcess;
@@ -906,65 +1048,11 @@ export function dispatchToWorker(
       // The timeout already resolved this run
       if (timedOut) return;
       if (code !== 0) {
-        const errMsg = stderr.trim() || `${provider.binName} exited with code ${code}`;
-        log.error(`dispatch failed for run ${runId}:`, errMsg);
-        broadcastEvent("agent", {
-          runId,
-          sessionKey,
-          stream: "lifecycle",
-          data: { phase: "error", error: errMsg },
-        });
-        resolve({ result: "", error: errMsg });
+        complete(null, stderr.trim() || `${provider.binName} exited with code ${code}`);
         return;
       }
 
-      const parsed = provider.parseResult(stdout);
-      recordSpend(room, parsed);
-      announceAchievements(room, {
-        room,
-        seatId,
-        seatLabel: seat.label,
-        durationMs: Date.now() - startedAt,
-        costUsd: parsed?.costUsd,
-        // Work that arrived here came from another agent, not a person
-        dispatched: true,
-        humansPresent: humansInRoom(room),
-      });
-      const responseText = parsed ? parsed.text : stdout.trim();
-
-      // Store session for future resume
-      if (parsed?.sessionId) {
-        dispatchSessions.set(seatSessionKey, parsed.sessionId);
-      }
-
-      if (parsed?.isError) {
-        log.error(`Dispatch to ${seat.label} returned an error: ${responseText}`);
-        broadcastEvent("agent", {
-          runId,
-          sessionKey,
-          stream: "lifecycle",
-          data: { phase: "error", error: responseText },
-        });
-        resolve({ result: "", error: responseText });
-        return;
-      }
-
-      // Emit lifecycle end + final chat for frontend
-      broadcastEvent("agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "end" },
-      });
-      broadcastEvent("chat", {
-        runId,
-        sessionKey,
-        state: "final",
-        message: { content: [{ type: "text", text: responseText }] },
-      });
-
-      log.info(`Dispatch to ${seat.label} completed (run ${runId})`);
-      resolve({ result: responseText });
+      complete(provider.parseResult!(stdout), null, stdout.trim());
     });
   });
 }
@@ -1052,5 +1140,9 @@ export function attachCliBridge(
 
   process.on("exit", cleanupMcpConfig);
 
-  log.info(`${provider.displayName} bridge attached on ${path} (bin: ${resolveBin(provider)})`);
+  log.info(
+    provider.kind === "service"
+      ? `${provider.displayName} bridge attached on ${path} (hosted service)`
+      : `${provider.displayName} bridge attached on ${path} (bin: ${resolveBin(provider)})`,
+  );
 }

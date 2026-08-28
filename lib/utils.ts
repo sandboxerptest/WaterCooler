@@ -10,16 +10,22 @@ export function getAgentProvider(): AgentProvider {
   if (val === "auggie") return "auggie";
   if (val === "openclaw") return "openclaw";
   if (val === "claude-api") return "claude-api";
+  if (val === "mettara") return "mettara";
   return "claude";
 }
 
 /**
- * True when agents run through a local CLI rather than an OpenClaw gateway.
- * CLI providers need no URL or token, so the app auto-connects to its own
- * in-process bridge.
+ * True when agents run through the in-process bridge rather than an OpenClaw
+ * gateway. These providers need no URL or token, so the app auto-connects to
+ * its own bridge — whether that bridge spawns a CLI or calls a hosted API.
  */
 export function isCliProvider(provider: AgentProvider = getAgentProvider()): boolean {
-  return provider === "auggie" || provider === "claude" || provider === "claude-api";
+  return (
+    provider === "auggie" ||
+    provider === "claude" ||
+    provider === "claude-api" ||
+    provider === "mettara"
+  );
 }
 
 /** Human-readable provider name for HUD copy. */
@@ -27,7 +33,23 @@ export function getProviderLabel(provider: AgentProvider = getAgentProvider()): 
   if (provider === "auggie") return "Auggie";
   if (provider === "claude") return "Claude Code";
   if (provider === "claude-api") return "Claude (API key)";
+  if (provider === "mettara") return "Mettara AI";
   return "OpenClaw";
+}
+
+/**
+ * What a person has to do for this provider to work, shown in the connection
+ * panel before the first successful run. Hosted providers need credentials on
+ * the server, not a CLI on the machine.
+ */
+export function getProviderSetupHint(provider: AgentProvider = getAgentProvider()): string {
+  if (provider === "mettara") {
+    return "Mettara runs on the server: set METTARA_API_SECRET and METTARA_PLATFORM_ID, and install the Mettara SDK.";
+  }
+  if (provider === "claude-api") {
+    return "Make sure ANTHROPIC_API_KEY is set on the server.";
+  }
+  return "Make sure the CLI is installed and signed in.";
 }
 
 export function getDefaultGatewayUrl() {

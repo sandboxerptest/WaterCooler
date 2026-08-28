@@ -108,7 +108,7 @@ export interface ToolChatMessage extends ChatMessageBase {
 
 export type ChatMessage = TextChatMessage | ToolChatMessage;
 
-export type AgentProvider = "openclaw" | "auggie" | "claude" | "claude-api";
+export type AgentProvider = "openclaw" | "auggie" | "claude" | "claude-api" | "mettara";
 
 export interface GatewayConfig {
   url: string;

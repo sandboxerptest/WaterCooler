@@ -57,20 +57,24 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Agent providers
 
-Agents can be executed three ways, selected with the `AGENT_PROVIDER` env var:
+Agents can be executed several ways, selected with the `AGENT_PROVIDER` env var:
 
-| Provider | Value | What runs the agent |
-| --- | --- | --- |
-| Claude Code (default) | `claude` | Local `claude` CLI, using your Claude subscription |
-| Auggie | `auggie` | Local `auggie` CLI |
-| OpenClaw | `openclaw` | An OpenClaw gateway over WebSocket |
+| Provider              | Value        | What runs the agent                                |
+| --------------------- | ------------ | -------------------------------------------------- |
+| Claude Code (default) | `claude`     | Local `claude` CLI, using your Claude subscription |
+| Claude (API key)      | `claude-api` | The same CLI against an Anthropic API key          |
+| Auggie                | `auggie`     | Local `auggie` CLI                                 |
+| Mettara AI            | `mettara`    | Mettara Connect's hosted AI, called over its SDK   |
+| OpenClaw              | `openclaw`   | An OpenClaw gateway over WebSocket                 |
 
-The two CLI providers need no gateway, URL or token: the server emulates the
-gateway protocol in-process and spawns the CLI per run, so the app connects to
-itself on startup. OpenClaw still works exactly as before.
+Every provider but OpenClaw needs no gateway, URL or token: the server emulates
+the gateway protocol in-process, so the app connects to itself on startup. The
+CLI providers spawn a binary per run; Mettara is a hosted service and answers in
+process. OpenClaw still works exactly as before.
 
 ```bash
 pnpm dev                          # Claude Code
+AGENT_PROVIDER=mettara pnpm dev   # Mettara AI
 AGENT_PROVIDER=openclaw pnpm dev  # OpenClaw gateway
 ```
 
@@ -84,12 +88,12 @@ session id is remembered so follow-up messages resume the same conversation.
 
 Optional env vars:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `CLAUDE_BIN` | resolved from PATH | Path to the `claude` executable |
-| `CLAUDE_PERMISSION_MODE` | `acceptEdits` | Permission mode for spawned agents |
-| `CLAUDE_ALLOWED_TOOLS` | — | Extra tools to allow, comma-separated (e.g. `Bash`) |
-| `AGENT_TOWN_MODEL` | CLI default | Model for spawned agents (`opus`, `sonnet`, `haiku`) |
+| Variable                 | Default            | Purpose                                              |
+| ------------------------ | ------------------ | ---------------------------------------------------- |
+| `CLAUDE_BIN`             | resolved from PATH | Path to the `claude` executable                      |
+| `CLAUDE_PERMISSION_MODE` | `acceptEdits`      | Permission mode for spawned agents                   |
+| `CLAUDE_ALLOWED_TOOLS`   | —                  | Extra tools to allow, comma-separated (e.g. `Bash`)  |
+| `AGENT_TOWN_MODEL`       | CLI default        | Model for spawned agents (`opus`, `sonnet`, `haiku`) |
 
 Note that `--print` runs are non-interactive: a tool that is neither
 auto-approved by the permission mode nor named in `CLAUDE_ALLOWED_TOOLS` is
@@ -164,6 +168,56 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md). We're especially looking for people 
 
 [MIT](./LICENSE)
 
+### Mettara AI provider
+
+`AGENT_PROVIDER=mettara` runs agents on Mettara Connect instead of a local CLI.
+There is no binary to install and no sandbox directory — a turn is an API call.
+
+It needs two credentials on the server and the Mettara SDK, which is
+distributed as a tarball rather than from the public npm registry:
+
+```bash
+npm install ./mettara-nodejs-<version>.tgz
+```
+
+```bash
+cat >> .env.local <<'ENV'          # gitignored; never commit these
+METTARA_API_SECRET=...
+METTARA_PLATFORM_ID=...
+ENV
+AGENT_PROVIDER=mettara pnpm dev
+```
+
+Each seat is provisioned as its own Mettara user, so workers hold separate
+threads of conversation. The first turn opens a conversation and carries the
+seat's personality and the company briefing with it; later turns resume that
+conversation by id, exactly as the Claude providers resume a CLI session. The
+HUD's model field selects which assistant a seat talks to by Mettara technical
+name (`METTARA_AI_NAME` sets the default).
+
+Missing credentials, or a missing SDK, are refused with a plain sentence in the
+worker's bubble rather than an opaque failure.
+
+Optional settings: `METTARA_BASE_URL` (staging or self-hosted),
+`METTARA_GROUP_ID` and `METTARA_GROUP_NAME` (the namespace the room's people are
+provisioned under).
+
+#### Letting a Mettara AI act in the office
+
+When the credentials are present the server also mounts a signed inbound
+endpoint at `/api/mettara/tools`, so a Mettara AI can reach back into the room:
+
+| Tool            | Arguments                 | What it does             |
+| --------------- | ------------------------- | ------------------------ |
+| `list_workers`  | `room?`                   | Returns the seat roster  |
+| `dispatch_task` | `seatId`, `task`, `room?` | Hands a task to a worker |
+
+Every request is verified before a handler sees it — body digest, ±5 minute
+clock skew, nonce replay, then the HMAC-SHA256 signature over
+`METHOD\npath\ntimestamp\nnonce\nbase64(SHA256(body))`. A forged request never
+consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
+is not mounted at all when there is no secret to verify against.
+
 ### Running agents with an API key (cloud mode)
 
 `AGENT_PROVIDER=claude-api` runs the same CLI against an Anthropic API key
@@ -191,11 +245,11 @@ stopped, the seat reports it plainly, and the concurrency slot is released.
 
 Three limits apply to every run, whether assigned directly or delegated:
 
-| Limit | Default | Env var |
-| --- | --- | --- |
-| Agents running at once | 4 | `AGENT_MAX_CONCURRENT` |
-| Spend per room | $50 | `ROOM_SPEND_LIMIT_USD` |
-| Humans per room | 4 | — |
+| Limit                  | Default | Env var                |
+| ---------------------- | ------- | ---------------------- |
+| Agents running at once | 4       | `AGENT_MAX_CONCURRENT` |
+| Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
+| Humans per room        | 4       | —                      |
 
 Spend is measured server-side from what each run reports, accumulated in the
 room's record, and shown in the HUD next to the occupancy pill. When a room
