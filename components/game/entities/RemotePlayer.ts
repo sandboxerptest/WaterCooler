@@ -33,6 +33,8 @@ export class RemotePlayer {
   /** "<sheet>:" when wearing something other than the default sheet. */
   private prefix = "";
   private bubble: ChatBubble;
+  /** Shown above the head while their voice is coming through. */
+  private voiceMark: Phaser.GameObjects.Text | null = null;
 
   constructor(scene: Phaser.Scene, player: PresencePlayer) {
     this.id = player.id;
@@ -61,6 +63,20 @@ export class RemotePlayer {
   }
 
   /** Show what this person just said, above their head. */
+  /** Mark them as talking on voice chat, or stop. */
+  setSpeaking(speaking: boolean) {
+    if (speaking && !this.voiceMark) {
+      this.voiceMark = this.sprite.scene.add
+        .text(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 - 4, "🔊", { fontSize: "14px" })
+        .setOrigin(0.5, 1)
+        .setDepth(21)
+        .setResolution(2);
+    } else if (!speaking && this.voiceMark) {
+      this.voiceMark.destroy();
+      this.voiceMark = null;
+    }
+  }
+
   say(text: string, ttl = 6000) {
     this.bubble.show(text, this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6, ttl);
   }
@@ -92,6 +108,7 @@ export class RemotePlayer {
     }
 
     this.nameTag.setPosition(this.sprite.x, this.sprite.y + FRAME_HEIGHT / 2 + 2);
+    this.voiceMark?.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 - 4);
     this.bubble.updatePosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6);
   }
 
@@ -123,6 +140,7 @@ export class RemotePlayer {
   }
 
   destroy() {
+    this.voiceMark?.destroy();
     this.bubble.destroy();
     this.sprite.destroy();
     this.nameTag.destroy();

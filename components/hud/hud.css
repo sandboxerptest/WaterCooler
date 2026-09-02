@@ -1627,3 +1627,28 @@
   border-color: var(--pixel-accent);
   color: var(--pixel-accent);
 }
+
+/* ── Voice chat ──────────────────────────────────────── */
+
+.hud-pill--button {
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.hud-pill--button:hover {
+  border-color: var(--pixel-border-light);
+}
+
+.hud-mic--on {
+  color: var(--pixel-green);
+  border-color: var(--pixel-green);
+}
+
+.hud-mic--speaking {
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
+}
+
+.hud-mic--blocked {
+  color: var(--pixel-red);
+}

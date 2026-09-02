@@ -42,6 +42,11 @@ export class RemotePlayerManager {
     this.players.get(id)?.say(text);
   }
 
+  /** Show or hide the voice mark above someone's head. */
+  setSpeaking(id: string, speaking: boolean) {
+    this.players.get(id)?.setSpeaking(speaking);
+  }
+
   remove(id: string) {
     const player = this.players.get(id);
     if (!player) return;

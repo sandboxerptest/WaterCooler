@@ -218,6 +218,21 @@ clock skew, nonce replay, then the HMAC-SHA256 signature over
 consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
 is not mounted at all when there is no secret to verify against.
 
+### Voice chat by proximity
+
+The microphone button in the bottom bar switches on voice chat. Audio goes
+browser to browser over WebRTC; the room socket carries only the handshake,
+and the server never hears anything. Everyone in the room with a microphone
+on is connected to everyone else who has one, and each voice is turned down
+by distance: full within three tiles, silent past nine, a straight fade
+between. A small speaker mark appears above someone while their voice is
+coming through. Voice works in rooms, where presence is; the world map and a
+campus have no room and no voice.
+
+Routing uses a public STUN server. Browsers behind strict NATs may need a
+TURN relay: set `NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME` and
+`NEXT_PUBLIC_TURN_CREDENTIAL` and it is offered alongside.
+
 ### Switching the agents between Claude and Mettara
 
 The server boots on `AGENT_PROVIDER` — the Claude CLI unless told otherwise —

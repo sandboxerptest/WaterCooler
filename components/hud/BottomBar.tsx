@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleDollarSign, Gamepad2, Sparkles, User, Users } from "lucide-react";
+import { CircleDollarSign, Gamepad2, Mic, MicOff, Sparkles, User, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
+import { useVoice } from "@/lib/hooks/useVoice";
+import { voiceChat } from "@/lib/voice/voice-chat";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
 import ContextMeter from "./ContextMeter";
@@ -41,6 +43,17 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
     });
   }, []);
 
+  const voice = useVoice();
+  const micOn = voice.status === "on";
+  const micTitle =
+    voice.status === "on"
+      ? voice.peers
+        ? `Microphone on — ${voice.inEarshot} of ${voice.peers} on voice within earshot. Click to switch off.`
+        : "Microphone on — nobody else here is on voice yet. Click to switch off."
+      : voice.status === "requesting"
+        ? "Asking for the microphone…"
+        : (voice.reason ?? "Switch on voice chat: people near you in the room will hear you.");
+
   const totalSeats = seats.length;
   const assignedSeats = seats.filter((s) => s.assigned).length;
   const workingCount = seats.filter(
@@ -75,6 +88,25 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
           {assignedSeats}/{totalSeats} seat
         </span>
       </div>
+      <button
+        type="button"
+        className={`hud-pill hud-pill--metric hud-pill--button hud-mic${micOn ? " hud-mic--on" : ""}${
+          voice.speaking ? " hud-mic--speaking" : ""
+        }${voice.status === "denied" || voice.status === "unsupported" ? " hud-mic--blocked" : ""}`}
+        onClick={() => void voiceChat.toggle()}
+        title={micTitle}
+        aria-pressed={micOn}
+        aria-label={micOn ? "Switch voice chat off" : "Switch voice chat on"}
+      >
+        {micOn ? <Mic size={10} /> : <MicOff size={10} />}
+        <span>
+          {voice.status === "requesting"
+            ? "mic…"
+            : micOn
+              ? `voice ${voice.inEarshot}/${voice.peers}`
+              : "voice off"}
+        </span>
+      </button>
       {humans && (
         <div
           className="hud-pill hud-pill--metric"

@@ -33,6 +33,8 @@ export interface GameEventMap {
   "presence-left": [id: string];
   /** How many humans are in the room, for the HUD. */
   "presence-count": [count: number, capacity: number];
+  /** Somebody on voice chat started or stopped talking; the scene marks them. */
+  "voice-speaking": [id: string, speaking: boolean];
   /** What the room has spent on agents, and the ceiling it stops at. */
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
   /** A controller appeared or went away, with its layout for prompts. */

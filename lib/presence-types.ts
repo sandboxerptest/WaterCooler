@@ -108,13 +108,33 @@ export interface PongRelayMessage {
   payload: import("./pong/protocol").PongPayload;
 }
 
+/**
+ * Voice chat is browser to browser over WebRTC; the server only carries the
+ * handshake. "hello" says a microphone is on, "bye" that it is off; the
+ * rest is the standard offer, answer and ICE exchange.
+ */
+export type VoiceSignal =
+  | { kind: "hello" }
+  | { kind: "bye" }
+  | { kind: "offer"; sdp: string }
+  | { kind: "answer"; sdp: string }
+  | { kind: "ice"; candidate: Record<string, unknown> };
+
+/** A handshake step on its way to one other player in the room. */
+export interface VoiceRelayMessage {
+  type: "voice";
+  to: string;
+  signal: VoiceSignal;
+}
+
 export type ClientMessage =
   | JoinMessage
   | MoveMessage
   | WorldMessage
   | SayMessage
   | BoardMessage
-  | PongRelayMessage;
+  | PongRelayMessage
+  | VoiceRelayMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -199,6 +219,13 @@ export interface SaidMessage {
   scope: SayScope;
 }
 
+/** A handshake step arriving from another player. */
+export interface VoiceBroadcast {
+  type: "voice";
+  from: { id: string; name: string };
+  signal: VoiceSignal;
+}
+
 export interface BoardBroadcast {
   type: "board";
   action: "draw" | "clear";
@@ -219,7 +246,8 @@ export type ServerMessage =
   | AchievementMessage
   | ActivityBroadcast
   | PongBroadcast
-  | BoardBroadcast;
+  | BoardBroadcast
+  | VoiceBroadcast;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;
@@ -230,8 +258,23 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "world" ||
     type === "say" ||
     type === "board" ||
-    type === "pong"
+    type === "pong" ||
+    type === "voice"
   );
+}
+
+/** The most a session description may weigh; a real one is a few kilobytes. */
+const SDP_LIMIT = 20_000;
+
+export function isVoiceSignal(value: unknown): value is VoiceSignal {
+  if (typeof value !== "object" || value === null) return false;
+  const { kind, sdp, candidate } = value as Record<string, unknown>;
+  if (kind === "hello" || kind === "bye") return true;
+  if (kind === "offer" || kind === "answer") {
+    return typeof sdp === "string" && sdp.length > 0 && sdp.length <= SDP_LIMIT;
+  }
+  if (kind === "ice") return typeof candidate === "object" && candidate !== null;
+  return false;
 }
 
 const WORLD_ENTITIES = ["task", "message", "seat", "session"] as const;

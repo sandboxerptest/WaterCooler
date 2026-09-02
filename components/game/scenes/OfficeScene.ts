@@ -345,6 +345,9 @@ export class OfficeScene extends Phaser.Scene {
     const unsubPresence = gameEvents.on("presence-updated", (players) => {
       this.remotePlayers.sync(players);
     });
+    const unsubSpeaking = gameEvents.on("voice-speaking", (id, speaking) => {
+      this.remotePlayers.setSpeaking(id, speaking);
+    });
     const unsubLeft = gameEvents.on("presence-left", (id) => {
       this.remotePlayers.remove(id);
     });
@@ -441,6 +444,7 @@ export class OfficeScene extends Phaser.Scene {
     this.cleanupPresence = () => {
       unsubPresence();
       unsubLeft();
+      unsubSpeaking();
       unsubSaid();
       unsubSelfSaid();
       unsubBadge();

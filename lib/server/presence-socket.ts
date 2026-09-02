@@ -32,6 +32,7 @@ import {
   type SayScope,
   type ServerMessage,
   type WorldChange,
+  isVoiceSignal,
 } from "../presence-types";
 
 import { ResidentSimulation } from "./residents";
@@ -467,6 +468,25 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
               type: "pong",
               from: { id, name: from?.name ?? "Someone" },
               payload: parsed.payload,
+            }),
+          );
+          return;
+        }
+
+        if (parsed.type === "voice") {
+          // The same post box, for the voice handshake: checked, addressed
+          // to someone in this room, and passed on unread.
+          const to = typeof parsed.to === "string" ? parsed.to : "";
+          if (!to || to === id || !isVoiceSignal(parsed.signal)) return;
+          if (roomOf.get(to) !== slug) return;
+          const target = room.sockets.get(to);
+          if (!target || target.readyState !== target.OPEN) return;
+          const from = room.hub.snapshot().find((p) => p.id === id);
+          target.send(
+            JSON.stringify({
+              type: "voice",
+              from: { id, name: from?.name ?? "Someone" },
+              signal: parsed.signal,
             }),
           );
           return;
