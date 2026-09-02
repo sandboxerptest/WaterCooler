@@ -8,6 +8,7 @@ import { voiceChat } from "@/lib/voice/voice-chat";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
 import ContextMeter from "./ContextMeter";
+import ControllerCheck from "./ControllerCheck";
 
 interface BottomBarProps {
   connection: ConnectionStatus;
@@ -36,6 +37,7 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
   }, []);
 
   const [pad, setPad] = useState<{ id: string; layout: string } | null>(null);
+  const [checkOpen, setCheckOpen] = useState(false);
 
   useEffect(() => {
     return gameEvents.on("gamepad-state", (id, layout) => {
@@ -119,15 +121,22 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
           </span>
         </div>
       )}
-      {pad && (
-        <div
-          className="hud-pill hud-pill--metric"
-          title={`${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold LT to talk`}
-        >
-          <Gamepad2 size={10} />
-          <span>{pad.layout} · hold LT to talk</span>
-        </div>
-      )}
+      {/* Always there, so a controller that is not being seen has somewhere to say so */}
+      <button
+        type="button"
+        className={`hud-pill hud-pill--metric hud-pill--button${pad ? "" : " hud-pill--dim"}`}
+        onClick={() => setCheckOpen(true)}
+        title={
+          pad
+            ? `${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold LT to talk\nClick for the controller check.`
+            : "No controller seen. Click for the controller check."
+        }
+        aria-label="Controller check"
+      >
+        <Gamepad2 size={10} />
+        <span>{pad ? `${pad.layout} · hold LT to talk` : "no pad"}</span>
+      </button>
+      {checkOpen && <ControllerCheck onClose={() => setCheckOpen(false)} />}
       {budget && (
         <div
           className="hud-pill hud-pill--metric"
