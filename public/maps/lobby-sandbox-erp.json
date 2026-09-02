@@ -11,7 +11,7 @@
  "version": "1.10",
  "tiledversion": "1.11.2",
  "nextlayerid": 13,
- "nextobjectid": 9,
+ "nextobjectid": 11,
  "tilesets": [
   {
    "columns": 16,
@@ -2056,6 +2056,17 @@
      "height": 672,
      "rotation": 0,
      "visible": true
+    },
+    {
+     "id": 5,
+     "name": "",
+     "type": "",
+     "x": 720,
+     "y": 192,
+     "width": 96,
+     "height": 96,
+     "rotation": 0,
+     "visible": true
     }
    ]
   },
@@ -2070,11 +2081,30 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 5,
+     "id": 6,
      "name": "Whiteboard",
      "type": "",
      "x": 504,
      "y": 120,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "name": "Pinball machine",
+     "type": "",
+     "x": 792,
+     "y": 312,
      "width": 0,
      "height": 0,
      "rotation": 0,
@@ -2101,7 +2131,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 6,
+     "id": 8,
      "name": "",
      "type": "",
      "x": 264,
@@ -2132,7 +2162,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 7,
+     "id": 9,
      "name": "door",
      "type": "",
      "x": 96,
@@ -2155,7 +2185,7 @@
      ]
     },
     {
-     "id": 8,
+     "id": 10,
      "name": "elevator",
      "type": "",
      "x": 96,

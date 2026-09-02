@@ -7,7 +7,7 @@ import {
   ZOOM_MAX,
   CAMERA_DRAG_THRESHOLD,
 } from "@/lib/constants";
-import { fillZoom, zoomToCover } from "@/lib/camera";
+import { frameZoom } from "@/lib/camera";
 
 export class CameraController {
   private scene: Phaser.Scene;
@@ -50,25 +50,18 @@ export class CameraController {
   }
 
   /**
-   * The smallest zoom that still covers the viewport, capped at ZOOM_MAX.
-   *
-   * Also the floor for the scroll wheel: zooming out past this is what put
-   * empty background beside the room in the first place.
+   * The zoom that fits the whole lobby on screen, capped either way. The
+   * lobby's size, not this room's: every floor is shown at the same scale.
+   * Also the floor for the scroll wheel: zooming out past this only adds
+   * background.
    */
   private coverZoom(cam: Phaser.Cameras.Scene2D.Camera): number {
-    return Math.min(fillZoom(cam.width, cam.height, this.mapWidth, this.mapHeight), ZOOM_MAX);
+    return frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX);
   }
 
-  /** Grow the view when the room no longer fills it; never shrink it. */
+  /** Fit the lobby to the viewport. Called at start and whenever the viewport changes. */
   private applyFillZoom(cam: Phaser.Cameras.Scene2D.Camera) {
-    const next = zoomToCover(
-      cam.zoom,
-      cam.width,
-      cam.height,
-      this.mapWidth,
-      this.mapHeight,
-      ZOOM_MAX,
-    );
+    const next = this.coverZoom(cam);
     if (next !== cam.zoom) cam.setZoom(next);
   }
 
@@ -150,11 +143,11 @@ export class CameraController {
     const mw = this.mapWidth;
     const mh = this.mapHeight;
 
-    // Pinned left, centred vertically. When the viewport is wider than the
-    // office, the slack goes on the right rather than being split either
-    // side — so the building sits against the chat column instead of
-    // drifting about in the middle as the column is dragged.
-    const bx = 0;
+    // Centred. The lobby always covers the viewport sideways — the zoom is
+    // fitted to it — so slack only appears around a room smaller than the
+    // lobby, and a small room belongs in the middle of the screen, not
+    // pushed into a corner.
+    const bx = viewW > mw ? -(viewW - mw) / 2 : 0;
     const by = viewH > mh ? -(viewH - mh) / 2 : 0;
     const bw = viewW > mw ? viewW : mw;
     const bh = viewH > mh ? viewH : mh;

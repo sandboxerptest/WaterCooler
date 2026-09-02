@@ -406,7 +406,7 @@ export default function Whiteboard() {
             className="pixel-button"
             style={{ fontSize: "8px", padding: "4px 10px" }}
             onClick={clearBoard}
-            title="Wipe the board for everyone in the room"
+            title="Wipe the board for everyone"
           >
             <Trash2 size={11} /> Clear
           </button>
@@ -466,7 +466,7 @@ export default function Whiteboard() {
         >
           {clearedBy
             ? `${clearedBy} cleared the board`
-            : "Everyone in this room sees what you draw · Esc or click outside to close"}
+            : "One board for every room — everyone sees what you draw · Esc or click outside to close"}
         </div>
       </div>
     </div>

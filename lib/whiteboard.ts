@@ -68,3 +68,10 @@ export function sanitiseStroke(stroke: Stroke): Stroke {
     author: stroke.author?.slice(0, 16),
   };
 }
+
+/**
+ * The board is one board. Every room shows the same drawing, so it is
+ * stored under this name rather than the room's, and a change is told to
+ * every room rather than the one it was made in.
+ */
+export const SHARED_BOARD = "global";

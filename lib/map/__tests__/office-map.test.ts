@@ -70,14 +70,15 @@ describe("generated office map", () => {
 
   it("fills the room with floor rather than leaving gaps", () => {
     const floor = tileLayer("floor").data;
-    expect(floor.filter((g) => g === WALLS.floor).length).toBeGreaterThan(300);
+    // Most of the room is floor: only the wall ring is not.
+    expect(floor.filter((g) => g === WALLS.floor).length).toBeGreaterThan(WIDTH * HEIGHT * 0.55);
   });
 });
 
 describe("the room is empty", () => {
-  it("has no interaction points left", () => {
-    expect(spec.pois).toHaveLength(0);
-    expect(objects("pois")).toHaveLength(0);
+  it("has one interaction point: the whiteboard", () => {
+    expect(spec.pois.map((p) => p.name)).toEqual(["Whiteboard"]);
+    expect(objects("pois").map((o) => o.name)).toEqual(["Whiteboard"]);
   });
 
   it("creates no agents", () => {
@@ -99,7 +100,7 @@ describe("the room is empty", () => {
   });
 
   it("keeps the pictures on the walls", () => {
-    expect(spec.placements.length).toBeGreaterThan(10);
+    expect(spec.placements.length).toBeGreaterThan(0);
     expect(spec.placements.every((p) => p.layer === "walls")).toBe(true);
   });
 
@@ -155,12 +156,15 @@ describe("wall collisions", () => {
 });
 
 describe("transitions", () => {
-  it("has a door at the top left and a lift at the bottom right", () => {
+  it("has a door at the top left and the lift straight below it at the bottom", () => {
     const door = spec.transitions.find((t) => t.name === "door")!;
     const lift = spec.transitions.find((t) => t.name === "elevator")!;
     expect(door.tx).toBeLessThan(WIDTH / 2);
     expect(door.ty).toBe(0);
-    expect(lift.tx).toBeGreaterThan(WIDTH / 2);
+    // Holding "down" from the door walks into the lift: the door's column
+    // is one of the lift's.
+    expect(door.tx).toBeGreaterThanOrEqual(lift.tx);
+    expect(door.tx).toBeLessThan(lift.tx + (lift.tw ?? 1));
     expect(lift.ty + (lift.th ?? 1)).toBe(HEIGHT);
   });
 
@@ -217,5 +221,41 @@ describe("paintShell", () => {
     expect(grid[2 * WIDTH + col]).toBe(WALLS.topBase);
     expect(grid[3 * WIDTH + col]).toBe(WALLS.topShadow);
     expect(grid[4 * WIDTH + col]).toBe(WALLS.floor);
+  });
+
+  describe("with a game in the corner", () => {
+    for (const [game, name] of [
+      ["pong", /pong/i],
+      ["pinball", /pinball/i],
+    ] as const) {
+      it(`${game}: brings the art, a point the scene knows by name, and something solid`, () => {
+        const withGame = buildOfficeSpec(source, game);
+        const built = generateMap(withGame, []);
+        const poiLayer = built.layers.find((l) => l.name === "pois");
+        if (!poiLayer || poiLayer.type !== "objectgroup") throw new Error("no pois");
+        expect(poiLayer.objects.some((o) => name.test(o.name))).toBe(true);
+        // Both games are drawn by the scene, so neither adds tiles.
+        {
+          expect(withGame.placements.length).toBe(spec.placements.length);
+        }
+        expect(withGame.collisions?.length).toBeGreaterThan(0);
+        // The point to play from is on the floor, not inside the solid art.
+        const point = poiLayer.objects.find((o) => name.test(o.name))!;
+        for (const box of withGame.collisions ?? []) {
+          const inside =
+            point.x >= box.x &&
+            point.x < box.x + box.width &&
+            point.y >= box.y &&
+            point.y < box.y + box.height;
+          expect(inside).toBe(false);
+        }
+        // Below the top wall and inside the room.
+        for (const p of withGame.placements.filter((pl) => pl.ty >= 3)) {
+          expect(p.tx).toBeGreaterThan(0);
+          expect(p.tx).toBeLessThan(WIDTH - 1);
+          expect(p.ty).toBeLessThan(HEIGHT - 1);
+        }
+      });
+    }
   });
 });

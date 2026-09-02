@@ -236,11 +236,7 @@ slot("fountain", 144, 96, (set, d) => {
   d.ellipse(72, 56, 56, 20, P.ink);
   d.ellipse(72, 56, 54, 18, P.waterDark);
   d.ellipse(72, 54, 46, 14, P.water);
-  for (const [rx, ry] of [
-    [30, 8],
-    [16, 4],
-  ])
-    d.ring(72, 54, rx, P.waterLit);
+  for (const rx of [30, 16]) d.ring(72, 54, rx, P.waterLit);
   d.rect(64, 20, 80, 56, P.ink);
   d.rect(66, 20, 78, 56, P.stone);
   d.rect(66, 20, 70, 56, P.slab);
@@ -257,12 +253,7 @@ slot("fountain2", 144, 96, (set, d) => {
   d.ellipse(72, 56, 56, 20, P.ink);
   d.ellipse(72, 56, 54, 18, P.waterDark);
   d.ellipse(72, 54, 46, 14, P.water);
-  for (const [rx, ry] of [
-    [38, 10],
-    [22, 6],
-    [8, 2],
-  ])
-    d.ring(72, 54, rx, P.waterLit);
+  for (const rx of [38, 22, 8]) d.ring(72, 54, rx, P.waterLit);
   d.rect(64, 20, 80, 56, P.ink);
   d.rect(66, 20, 78, 56, P.stone);
   d.rect(66, 20, 70, 56, P.slab);
