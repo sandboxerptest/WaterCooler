@@ -50,6 +50,7 @@ describe("organisations and their lobbies", () => {
       "Finance",
       "Operations",
       "Building Supply",
+      "Building Supply Warehouse",
       "Field Crew",
     ]);
     expect(hasCampus("castle-atlantic")).toBe(false);

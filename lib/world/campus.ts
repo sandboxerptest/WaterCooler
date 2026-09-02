@@ -177,7 +177,10 @@ export function campusSpawnFor(campus: Campus, fromTenant: string | null | undef
 /** Every campus lists exactly its organisation's lobbies. */
 export function campusMatchesTenants(campus: Campus): boolean {
   const listed = campus.buildings.map((b) => b.tenant.slug).sort();
+  // A warehouse stands behind its store, reached through the back door,
+  // not from the yard.
   const expected = tenantsOf(campus.slug)
+    .filter((t) => t.kind !== "warehouse")
     .map((t) => t.slug)
     .sort();
   return JSON.stringify(listed) === JSON.stringify(expected);

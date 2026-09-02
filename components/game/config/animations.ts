@@ -54,7 +54,7 @@ export const WORKER_SPRITES: WorkerSpriteConfig[] = [
   // The other residents, built the same way from their sheets.
   { key: "character_mark", path: "/characters/Mark_48x48.png", label: "Mark" },
   { key: "character_sara", path: "/characters/Sara_48x48.png", label: "Sara" },
-  { key: "character_spud", path: "/characters/Spud_48x48.png", label: "Spud" },
+  { key: "character_spud", path: "/characters/Spud_48x48.png", label: "Bud" },
   { key: "character_steve", path: "/characters/Steve_48x48.png", label: "Steve" },
   { key: "character_yash", path: "/characters/Yash_48x48.png", label: "Yash" },
 ];

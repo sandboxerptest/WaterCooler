@@ -43,10 +43,10 @@ describe("the residents", () => {
     }
   });
 
-  it("are Yoshi at Castle Atlantic, Sara and Spud at Sandbox ERP, Yash at Mettara, Steve at Chester, Mark at Homestar", () => {
+  it("are Yoshi at Castle Atlantic, Sara and Bud at Sandbox ERP, Yash at Mettara, Steve at Chester, Mark at Homestar", () => {
     const names = (org: string) => residentsOf(org).map((r) => r.name);
     expect(names("castle-atlantic")).toEqual(["Yoshi"]);
-    expect(names("sandbox-erp")).toEqual(["Sara", "Spud"]);
+    expect(names("sandbox-erp")).toEqual(["Sara", "Bud"]);
     expect(names("mettara")).toEqual(["Yash"]);
     expect(names("chester")).toEqual(["Steve"]);
     expect(names("homestar")).toEqual(["Mark"]);
@@ -63,7 +63,7 @@ describe("desks", () => {
   });
 
   it("go two to a floor at Sandbox ERP, in order", () => {
-    expect(residentsAt("sandbox-erp").map((r) => r.name)).toEqual(["Sara", "Spud"]);
+    expect(residentsAt("sandbox-erp").map((r) => r.name)).toEqual(["Sara", "Bud"]);
     expect(deskOf(residentById("spud")!)).toBe(1);
   });
 
@@ -99,6 +99,7 @@ describe("haunts", () => {
       "room:homestar-finance",
       "room:homestar-operations",
       "room:homestar-store",
+      "room:homestar-warehouse",
       "room:homestar-field-crew",
       "campus:homestar",
       "outside",

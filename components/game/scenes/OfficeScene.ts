@@ -548,17 +548,19 @@ export class OfficeScene extends Phaser.Scene {
 
   /** What a doorway in the top wall leads to, lettered above it. */
   private addDoorSign(zone: { name: string; target: string; x: number; y: number; width: number }) {
+    // A store's rooms are named by what they are, whatever the store is
+    // called, so a long name does not hang off the wall by the door.
+    const to = tenantFor(zone.target.split(":")[1]);
+    const short = to?.kind === "store" ? "Store" : to?.kind === "warehouse" ? "Warehouse" : null;
     const label =
-      zone.target === "world"
-        ? "EXIT"
-        : (tenantFor(zone.target.split(":")[1])?.location ?? zone.name).toUpperCase();
+      zone.target === "world" ? "EXIT" : (short ?? to?.location ?? zone.name).toUpperCase();
     this.add
       .text(zone.x + zone.width / 2, zone.y + 30, label, {
-        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "9px",
+        fontFamily: '"Press Start 2P", monospace',
+        fontSize: "12px",
         color: "#ffe9a8",
         backgroundColor: "rgba(27,27,42,0.85)",
-        padding: { x: 5, y: 2 },
+        padding: { x: 6, y: 3 },
       })
       .setOrigin(0.5, 1)
       .setDepth(12)
@@ -583,29 +585,34 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
-  /** The tenant's name and where you are, lettered on the top wall between the door and the board. */
+  /** The tenant's name and where you are, lettered large on the top wall. */
   private addWallSign(address: Address) {
-    // Between the door and the board in a lobby; right of the shop window
-    // in a store, warehouse or garage.
-    const x = hasFloors(address.tenant) ? 6 * 48 : 17 * 48;
+    // Right of the board in a lobby, where the wall is widest; right of the
+    // shop window in a store, warehouse or garage. The longest names fit
+    // either at this size.
+    const lobby = hasFloors(address.tenant);
+    const x = lobby ? 15 * 48 : 17 * 48;
     this.add
-      .text(x, 94, address.tenant.name.toUpperCase(), {
-        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "14px",
+      .text(x, 92, address.tenant.name.toUpperCase(), {
+        fontFamily: '"Press Start 2P", monospace',
+        fontSize: "16px",
         color: "#3a3a50",
       })
       .setOrigin(0.5, 1)
       .setDepth(3)
       .setResolution(2);
+    // Wrapped to the wall it has, so "Building Supply Warehouse" takes two lines.
     this.add
       .text(
         x,
         100,
         [address.tenant.location, describeFloor(address)].filter(Boolean).join(" · ").toUpperCase(),
         {
-          fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-          fontSize: "11px",
+          fontFamily: '"Press Start 2P", monospace',
+          fontSize: "12px",
           color: "#565972",
+          align: "center",
+          wordWrap: { width: lobby ? 340 : 200 },
         },
       )
       .setOrigin(0.5, 0)

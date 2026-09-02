@@ -20,7 +20,7 @@ describe("campuses", () => {
         ...campus.props.map(propBody).filter((r) => r !== null),
       ];
 
-      it("has one little building per lobby, and no others", () => {
+      it("has one little building per lobby, apart from the warehouse behind the store", () => {
         expect(campusMatchesTenants(campus)).toBe(true);
       });
 

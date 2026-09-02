@@ -50,7 +50,7 @@ export const RESIDENTS: readonly Resident[] = [
   },
   {
     id: "spud",
-    name: "Spud",
+    name: "Bud",
     title: "Support",
     org: "sandbox-erp",
     home: "sandbox-erp",

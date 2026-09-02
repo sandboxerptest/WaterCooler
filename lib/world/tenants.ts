@@ -79,6 +79,11 @@ export const TENANTS: readonly Tenant[] = [
   lobby("homestar-finance", "homestar", { location: "Finance", kind: "office" }),
   lobby("homestar-operations", "homestar", { location: "Operations", kind: "office" }),
   lobby("homestar-store", "homestar", { location: "Building Supply", kind: "store" }),
+  // Behind the campus's store, so it carries the store's name too.
+  lobby("homestar-warehouse", "homestar", {
+    location: "Building Supply Warehouse",
+    kind: "warehouse",
+  }),
   lobby("homestar-field-crew", "homestar", { location: "Field Crew", kind: "garage" }),
   lobby("mettara", "mettara"),
 ];
