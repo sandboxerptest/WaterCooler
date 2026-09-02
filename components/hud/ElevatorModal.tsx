@@ -57,6 +57,14 @@ export default function ElevatorModal() {
 
   useEffect(() => {
     if (!open) return;
+    // You walk into the lift holding a direction, and the browser repeats
+    // that key while it is held. The menu ignores every movement key until
+    // one has been let go, and then takes one step per press, not per repeat.
+    let armed = false;
+    const isMove = (key: string) => ["ArrowUp", "ArrowDown", "w", "W", "s", "S"].includes(key);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (isMove(e.key)) armed = true;
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         close();
@@ -74,6 +82,7 @@ export default function ElevatorModal() {
             : 0;
       if (delta) {
         e.preventDefault();
+        if (!armed || e.repeat) return;
         stops[nextFocusIndex(current, delta, stops.length)]?.focus();
         return;
       }
@@ -84,13 +93,18 @@ export default function ElevatorModal() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [open]);
 
   if (!open) return null;
 
   const address = addressFromLocation(window.location);
-  const stops = address ? elevatorStops(address, { people }) : [];
+  // Only where you can go: the floor you are on is not a destination.
+  const stops = address ? elevatorStops(address, { people }).filter((s) => !s.here) : [];
 
   return createPortal(
     <div className="studio-overlay" onClick={close}>
@@ -116,7 +130,6 @@ export default function ElevatorModal() {
                 key={stop.label}
                 type="button"
                 className="lift-stop"
-                disabled={stop.here}
                 onClick={() => window.location.assign(stop.url)}
               >
                 <span className="lift-stop__floor">
@@ -125,7 +138,6 @@ export default function ElevatorModal() {
                     <span className="lift-stop__names">{stop.names.join(" · ")}</span>
                   )}
                 </span>
-                {stop.here && <span className="lift-stop__here">You are here</span>}
               </button>
             ))}
           </div>
