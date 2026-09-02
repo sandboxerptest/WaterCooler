@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
+import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { Pathfinder } from "../utils/Pathfinder";
 import { ensureAnims, ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
@@ -329,13 +330,18 @@ export class WorldScene extends Phaser.Scene {
     return { x: body.center.x, y: body.center.y };
   }
 
+  /** The pad's push on the character; nothing while a dialog has the screen. */
+  private padVelocity() {
+    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(MOVE_SPEED);
+  }
+
   update(_time: number, delta: number) {
     if (this.leaving) return;
     if (this.arrival.holdsInput) {
       if (this.arrival.walking) {
         this.player.drive(this.arrival.step(delta, MOVE_SPEED));
       } else {
-        const wanted = this.player.inputVelocity(this.gamepad.velocity(MOVE_SPEED));
+        const wanted = this.player.inputVelocity(this.padVelocity());
         this.arrival.release(wanted.vx !== 0 || wanted.vy !== 0);
         this.player.drive(this.arrival.allow(wanted));
         for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
@@ -343,7 +349,7 @@ export class WorldScene extends Phaser.Scene {
       this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
       return;
     }
-    const padVelocity = this.gamepad.velocity(MOVE_SPEED);
+    const padVelocity = this.padVelocity();
     const steering = this.navigator.active ? this.navigator.step(this.feet(), MOVE_SPEED) : null;
     if (
       this.navigator.active &&

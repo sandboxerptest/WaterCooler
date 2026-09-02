@@ -52,7 +52,8 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         : "Microphone on — nobody else here is on voice yet. Click to switch off."
       : voice.status === "requesting"
         ? "Asking for the microphone…"
-        : (voice.reason ?? "Switch on voice chat: people near you in the room will hear you.");
+        : (voice.reason ??
+          "Switch on voice chat: people near you in the room will hear you. On a controller, hold LT to talk.");
 
   const totalSeats = seats.length;
   const assignedSeats = seats.filter((s) => s.assigned).length;
@@ -119,9 +120,12 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         </div>
       )}
       {pad && (
-        <div className="hud-pill hud-pill--metric" title={pad.id}>
+        <div
+          className="hud-pill hud-pill--metric"
+          title={`${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold LT to talk`}
+        >
           <Gamepad2 size={10} />
-          <span>{pad.layout}</span>
+          <span>{pad.layout} · hold LT to talk</span>
         </div>
       )}
       {budget && (

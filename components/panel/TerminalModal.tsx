@@ -4,7 +4,6 @@ import MicButton from "@/components/hud/MicButton";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useStudio } from "@/lib/store";
 import { gameEvents } from "@/lib/events";
-import { useGamepadFocus } from "@/lib/hooks/useGamepadFocus";
 
 export default function TerminalModal() {
   const [open, setOpen] = useState(false);
@@ -45,8 +44,8 @@ export default function TerminalModal() {
 
   useEffect(() => gameEvents.on("gamepad-state", (id) => setPadConnected(id !== null)), []);
 
-  // The d-pad moves the ring between the text box, Assign, the mic and ESC
-  useGamepadFocus(panelRef, open);
+  // The d-pad moves the ring between the text box, Assign, the mic and ESC:
+  // the HUD's controller driver does that for any dialog, found by its role.
 
   // Focus input when opened
   useEffect(() => {
@@ -103,6 +102,8 @@ export default function TerminalModal() {
       <div
         ref={panelRef}
         className="pixel-panel"
+        role="dialog"
+        aria-label="Assign a task"
         style={{
           width: "min(520px, 90vw)",
           padding: "20px",
@@ -167,7 +168,7 @@ export default function TerminalModal() {
           </div>
           {padConnected && (
             <div style={{ fontSize: "8px", color: "var(--pixel-muted)", marginTop: "8px" }}>
-              D-pad move · A select (hold for the mic) · B close
+              D-pad move · A select (hold for the mic) · B close · hold LT to talk
             </div>
           )}
         </div>

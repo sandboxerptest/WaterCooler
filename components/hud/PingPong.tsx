@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import FullscreenButton, { useFullscreen } from "./FullscreenButton";
+import PadLegend from "./PadLegend";
+import { useMachinePad } from "@/lib/hooks/useMachinePad";
+import { PAD_OWN_ATTR } from "@/lib/gamepad/dialogs";
+import { XBOX } from "@/lib/gamepad/buttons";
+import { padMonitor } from "@/lib/gamepad/monitor";
 import { gameEvents } from "@/lib/events";
 import { onRoomMessage, sendRoom } from "@/lib/room-socket";
 import { getSelfId } from "@/lib/presence-self";
@@ -115,6 +121,11 @@ export default function PingPong() {
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const overlayRef = useRef<HTMLDivElement>(null);
+  /** Whichever menu is showing: the ring starts on its first choice, not the head's icons. */
+  const menuRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(overlayRef);
   const gameRef = useRef<PongState | null>(null);
   const modeRef = useRef<Mode>(mode);
   const keysRef = useRef({ up: false, down: false });
@@ -231,6 +242,35 @@ export default function PingPong() {
     });
   }, []);
 
+  // The controller, by the bindings printed on the table. The menus are
+  // ordinary buttons, so the d-pad walks them and A presses one; in a game
+  // the stick or d-pad moves the bat (read by the loop), B goes back to the
+  // menu, X fills the screen, View leaves, Menu plays again.
+  const playing = mode.at === "computer" || mode.at === "match";
+  useMachinePad(open, {
+    back: () => {
+      const current = modeRef.current;
+      if (current.at === "menu") {
+        close();
+        return;
+      }
+      if (current.at === "match" || current.at === "waiting") {
+        send(current.against.id, { kind: "quit", matchId: current.matchId });
+      }
+      gameRef.current = null;
+      setMode({ at: "menu" });
+    },
+    close,
+    fullscreen: fullscreen.toggle,
+    restart: () => {
+      if (modeRef.current.at !== "computer" || !gameRef.current) return;
+      gameRef.current = createPong("right");
+      setDisplay({ left: 0, right: 0, winner: null, matchPoint: null });
+    },
+    menu: menuRef,
+    menuActive: !playing,
+  });
+
   // ── Keys ──
   useEffect(() => {
     if (!open) return;
@@ -288,7 +328,8 @@ export default function PingPong() {
       last = now;
 
       const mySide: Side = current.at === "match" ? current.side : "left";
-      const keyed = (keysRef.current.up ? -1 : 0) + (keysRef.current.down ? 1 : 0);
+      const padded = (padMonitor.isHeld(XBOX.UP) ? -1 : 0) + (padMonitor.isHeld(XBOX.DOWN) ? 1 : 0);
+      const keyed = (keysRef.current.up ? -1 : 0) + (keysRef.current.down ? 1 : 0) || padded;
       const finger = touchTargetRef.current;
       const mine =
         keyed !== 0 || finger === null ? keyed : towardTarget(game.paddles[mySide], finger);
@@ -435,6 +476,7 @@ export default function PingPong() {
 
   return (
     <div
+      ref={overlayRef}
       className="pong-overlay"
       onClick={(event) => {
         // With a mouse, clicking beside the table leaves. With a finger that
@@ -446,24 +488,28 @@ export default function PingPong() {
       }}
       role="dialog"
       aria-label="Ping pong"
+      {...{ [PAD_OWN_ATTR]: "" }}
     >
       <div className="pixel-panel pong-panel">
         <div className="pong-head">
           <span style={{ fontSize: "10px" }}>Ping pong</span>
-          <button
-            type="button"
-            className="pixel-icon-btn"
-            style={{ width: 26, height: 26 }}
-            onClick={close}
-            title="Close (Esc)"
-            aria-label="Close ping pong"
-          >
-            <X size={12} />
-          </button>
+          <span style={{ display: "inline-flex", gap: 6 }}>
+            <FullscreenButton control={fullscreen} what="ping pong" />
+            <button
+              type="button"
+              className="pixel-icon-btn"
+              style={{ width: 26, height: 26 }}
+              onClick={close}
+              title="Close (Esc)"
+              aria-label="Close ping pong"
+            >
+              <X size={12} />
+            </button>
+          </span>
         </div>
 
         {mode.at === "menu" && (
-          <div className="pong-menu">
+          <div ref={menuRef} className="pong-menu">
             <div className="pong-menu__group">
               <div className="pong-menu__title">Against the computer</div>
               {DIFFICULTIES.map((level) => (
@@ -506,7 +552,7 @@ export default function PingPong() {
         )}
 
         {mode.at === "waiting" && (
-          <div className="pong-menu">
+          <div ref={menuRef} className="pong-menu">
             <div className="pong-menu__title">Waiting for {mode.against.name} to say yes…</div>
             <button type="button" className="pixel-button" onClick={() => setMode({ at: "menu" })}>
               Never mind
@@ -581,7 +627,31 @@ export default function PingPong() {
                 </span>
               )}
             </div>
+            <div className="pong-foot pong-foot--pad">
+              <PadLegend
+                entries={[
+                  ["back", "menu"],
+                  ["restart", "again"],
+                  ["fullscreen", "full screen"],
+                  ["close", "leave"],
+                  ["talk", "talk"],
+                ]}
+              />
+            </div>
           </>
+        )}
+        {!playing && (
+          <div className="pong-foot pong-foot--pad">
+            <PadLegend
+              entries={[
+                ["act", "choose"],
+                ["back", "leave"],
+                ["fullscreen", "full screen"],
+                ["close", "leave"],
+                ["talk", "talk"],
+              ]}
+            />
+          </div>
         )}
       </div>
     </div>

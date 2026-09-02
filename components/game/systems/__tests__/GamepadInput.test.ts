@@ -8,7 +8,7 @@ import {
   detectPadLayout,
   padVelocity,
 } from "../GamepadInput";
-import { nextFocusIndex } from "@/lib/hooks/useGamepadFocus";
+import { nextFocusIndex } from "@/lib/gamepad/focus";
 
 const SPEED = 100;
 

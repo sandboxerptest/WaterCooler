@@ -162,6 +162,15 @@ CREATE TABLE IF NOT EXISTS pinball_scores (
 );
 
 CREATE INDEX IF NOT EXISTS pinball_by_room ON pinball_scores (room, score DESC);
+
+CREATE TABLE IF NOT EXISTS arcade_scores (
+  room       TEXT NOT NULL,
+  game       TEXT NOT NULL,
+  player     TEXT NOT NULL,
+  score      INTEGER NOT NULL,
+  scored_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS arcade_by_game ON arcade_scores (room, game, score DESC);
 CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
 CREATE INDEX IF NOT EXISTS tasks_by_room ON tasks (room, position);
 CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
@@ -550,6 +559,35 @@ export class RoomStore {
          WHERE room = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
       )
       .all(room, limit) as unknown as PinballScore[];
+  }
+
+  // ── The arcade cabinet ────────────────────────────────
+
+  /** Like the cauldron's board, one per game in the cabinet. */
+  recordArcadeScore(room: string, game: string, player: string, score: number): PinballScore[] {
+    this.ensureRoom(room);
+    this.db
+      .prepare(
+        "INSERT INTO arcade_scores (room, game, player, score, scored_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(
+        room,
+        game,
+        player.slice(0, 16),
+        Math.max(0, Math.round(score)),
+        new Date().toISOString(),
+      );
+    return this.topArcadeScores(room, game);
+  }
+
+  topArcadeScores(room: string, game: string, limit = PINBALL_HIGH_SCORES): PinballScore[] {
+    this.ensureRoom(room);
+    return this.db
+      .prepare(
+        `SELECT player, score, scored_at FROM arcade_scores
+         WHERE room = ? AND game = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
+      )
+      .all(room, game, limit) as unknown as PinballScore[];
   }
 
   // ── Achievements ──────────────────────────────────────

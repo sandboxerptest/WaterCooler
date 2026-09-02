@@ -13,6 +13,7 @@
  */
 
 import * as Phaser from "phaser";
+import { detectPadLayout, type PadLayout } from "@/lib/gamepad/buttons";
 
 /** Ignore stick noise below this magnitude. */
 export const STICK_DEADZONE = 0.25;
@@ -56,18 +57,8 @@ const ACTION_BUTTONS: Record<PadAction, number[]> = {
   panelClose: [PAD_BUTTON.BACK],
 };
 
-export type PadLayout = "xbox" | "playstation" | "nintendo";
-
-/**
- * Guess the button labelling from the pad's id string. Only affects on-screen
- * prompts — the button indices are the same standard mapping either way.
- */
-export function detectPadLayout(id: string | undefined): PadLayout {
-  const lower = (id ?? "").toLowerCase();
-  if (/dualsense|dualshock|playstation|sony|054c/.test(lower)) return "playstation";
-  if (/switch|joy-?con|nintendo|057e/.test(lower)) return "nintendo";
-  return "xbox";
-}
+export { detectPadLayout };
+export type { PadLayout };
 
 /** Label for the confirm button, for prompts like "Press A". */
 export function confirmLabel(layout: PadLayout): string {
@@ -184,9 +175,6 @@ export class GamepadInput {
   private stickEdgeX: -1 | 0 | 1 = 0;
   layout: PadLayout = "xbox";
 
-  /** Told when a pad appears or disappears, so the HUD can show it. */
-  onConnected: ((id: string | null, layout: PadLayout) => void) | null = null;
-
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
   }
@@ -226,12 +214,7 @@ export class GamepadInput {
     if (pad?.id !== this.pad?.id) {
       this.edges.reset();
       this.pad = pad;
-      if (pad) {
-        this.layout = detectPadLayout(pad.id);
-        this.onConnected?.(pad.id, this.layout);
-      } else {
-        this.onConnected?.(null, this.layout);
-      }
+      if (pad) this.layout = detectPadLayout(pad.id);
     } else {
       this.pad = pad;
     }

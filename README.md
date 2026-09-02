@@ -218,6 +218,54 @@ clock skew, nonce replay, then the HMAC-SHA256 signature over
 consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
 is not mounted at all when there is no secret to verify against.
 
+### The arcade cabinet
+
+Beside the pinball machine in the Sandbox ERP lobby stands an arcade cabinet
+with four games. Oak Island is the showpiece: a top-down adventure across the
+island of the legend, screen by screen, with a shovel. Dig the coconut fibre
+out of Smith's Cove to survive the flood tunnels, take the lead cross from
+under Nolan's Cross, find the lantern in Samuel Ball's ruins, read the
+90-foot stone by its light, and open the Chappell Vault at 150 feet — while
+crabs, swamp wisps, pirate skeletons and the ghosts of the shaft try to make
+you the seventh to die. Then Flappy, Snake, Breakout and Solitaire. Walk up,
+press E, pick one.
+
+The cabinet has its own music, "Mighty Coin Drop", from the moment it opens;
+Oak Island swaps in "Tide Under Oak" while it plays, and the pinball machine
+has "Silver Ball Surge". The room's music steps aside meanwhile. A button on
+each machine mutes the songs, one switch for all of them, remembered in the
+browser; every game's sound effects are synthesised and play regardless.
+Each keeps its own high score table for the room, and a score goes in the
+room's activity like a pinball one. Keys, a pad or a touch screen all work;
+Escape (or B) backs out of a game to the menu, and out of the menu to the
+room.
+
+### Playing with a controller
+
+Plug in an Xbox controller (a PlayStation or Switch pad works the same; the
+prompts use the Xbox names) and the bottom bar shows it. The stick or d-pad
+walks, A talks to whoever you are standing by, the bumpers turn through the
+HUD's panels, View closes the open one, and B backs out of anything, the way
+Escape does. Any dialog — the welcome, the lift, the task terminal, the
+character studio — can be walked with the d-pad and pressed with A. Hold the
+left trigger to talk on voice chat: the microphone is live while the trigger
+is down and off the moment it is let go.
+
+The game machines all use the same buttons, printed on each one:
+
+| Button | Does                                                                        |
+| ------ | --------------------------------------------------------------------------- |
+| A      | act: play, flap, fire the plunger, choose                                   |
+| B      | back: out of a game to the menu, out of the menu                            |
+| X      | full screen (the window fills; a pad press cannot ask the browser for more) |
+| Y      | music on or off                                                             |
+| View   | close the machine from anywhere                                             |
+| Menu   | play again, or a new deal                                                   |
+| LT     | hold to talk                                                                |
+
+Pinball flips with the bumpers or the d-pad; ping pong moves the bat with
+the stick or the d-pad.
+
 ### Files with a task
 
 The paperclip beside the chat box attaches files to the next task, up to

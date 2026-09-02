@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpDown, X } from "lucide-react";
 import { gameEvents } from "@/lib/events";
-import { focusableIn, nextFocusIndex, useGamepadFocus } from "@/lib/hooks/useGamepadFocus";
+import { focusableIn, nextFocusIndex } from "@/lib/gamepad/focus";
 import { fetchPeople } from "@/lib/people-client";
 import { addressFromLocation, elevatorStops, type Occupant } from "@/lib/world/floors";
 
@@ -25,9 +25,6 @@ export default function ElevatorModal() {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => gameEvents.on("open-elevator", () => setOpen(true)), []);
-
-  // The pad walks the buttons the same way it does in every other dialog.
-  useGamepadFocus(panelRef, open);
 
   const close = () => {
     setOpen(false);

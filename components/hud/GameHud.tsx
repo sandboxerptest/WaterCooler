@@ -17,6 +17,7 @@ import CharacterStudio from "./CharacterStudio";
 import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
 import Welcome from "./Welcome";
+import GamepadDriver from "./GamepadDriver";
 import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
 import { pushProfileToAccount } from "@/lib/account-client";
@@ -24,6 +25,7 @@ import ElevatorModal from "./ElevatorModal";
 import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
 import Pinball from "./Pinball";
+import Arcade from "./Arcade";
 import PingPong from "./PingPong";
 import TouchControls from "./TouchControls";
 
@@ -148,11 +150,13 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
 
   return (
     <div className="hud-overlay">
+      <GamepadDriver />
       <Welcome />
       <ElevatorModal />
       <AchievementToast />
       <Whiteboard />
       <Pinball />
+      <Arcade />
       <PingPong />
       <TouchControls />
       {/* Top area: logo | agent pills | tool buttons */}

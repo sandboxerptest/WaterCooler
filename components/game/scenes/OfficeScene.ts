@@ -47,6 +47,7 @@ import { WorkerManager } from "../systems/WorkerManager";
 import { InteractionManager } from "../systems/InteractionManager";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
+import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { RemotePlayerManager } from "../systems/RemotePlayerManager";
 import { DoorManager } from "../systems/DoorManager";
 import { initSceneEventBridge } from "../systems/SceneEventBridge";
@@ -74,6 +75,9 @@ export class OfficeScene extends Phaser.Scene {
   private cauldronZone: { x: number; y: number } | null = null;
   private cauldronPrompt: Phaser.GameObjects.Text | null = null;
   private pinballOpen = false;
+  private arcadeZone: { x: number; y: number } | null = null;
+  private arcadePrompt: Phaser.GameObjects.Text | null = null;
+  private arcadeOpen = false;
   private navigator = new TapNavigator();
   private pathfinder: Pathfinder | null = null;
   /** The steps taken on arrival, before the keys are the player's. */
@@ -86,7 +90,6 @@ export class OfficeScene extends Phaser.Scene {
   private pingPongOpen = false;
   private elevatorOpen = false;
   /** False while a just-opened dialog waits for the stick and keys to be let go. */
-  private dialogArmed = true;
   private boardPrompt: Phaser.GameObjects.Text | null = null;
   private whiteboardOpen = false;
   private eKey!: Phaser.Input.Keyboard.Key;
@@ -153,6 +156,7 @@ export class OfficeScene extends Phaser.Scene {
     // a lift car is, and the same five-frame format as the swing door.
     this.load.image("pingpong-table", "/sprites/pingpong_table_96x72.png");
     this.load.image("pinball-machine", "/sprites/pinball_machine_96x120.png");
+    this.load.image("arcade-cabinet", "/sprites/arcade_cabinet_96x120.png");
     this.load.image("van", "/sprites/world/van_96x144.png");
     this.load.spritesheet("anim-elevator", "/sprites/animated_elevator_96x144.png", {
       frameWidth: 96,
@@ -228,6 +232,8 @@ export class OfficeScene extends Phaser.Scene {
     this.cauldronZone = cauldron ? { x: cauldron.x, y: cauldron.y } : null;
     const bucket = pois.find((poi) => /bucket|pong/i.test(poi.name));
     this.bucketZone = bucket ? { x: bucket.x, y: bucket.y } : null;
+    const arcade = pois.find((poi) => /arcade/i.test(poi.name));
+    this.arcadeZone = arcade ? { x: arcade.x, y: arcade.y } : null;
 
     // Beside the desk, not in it — the nook has walls on three sides
     this.player = new Player(
@@ -295,6 +301,12 @@ export class OfficeScene extends Phaser.Scene {
       machine.setDepth(4);
       this.addSign(this.cauldronZone, "PINBALL", machine.getTopCenter().y);
     }
+    if (this.arcadeZone) {
+      // Against the same wall as the pinball machine, one row above its point.
+      const cabinet = this.add.image(this.arcadeZone.x, this.arcadeZone.y - 60, "arcade-cabinet");
+      cabinet.setDepth(4);
+      this.addSign(this.arcadeZone, "ARCADE", cabinet.getTopCenter().y);
+    }
     // The board hangs on the wall; its sign goes above it, centred on the
     // board itself — its point is on the board's right-hand tile — with the
     // arrow on the wall's cap.
@@ -336,12 +348,6 @@ export class OfficeScene extends Phaser.Scene {
     this.gamepad = new GamepadInput(this);
     this.remotePlayers = new RemotePlayerManager(this);
 
-    // Surface the controller in the HUD: without it, "is it even detected?"
-    // is unanswerable from inside the game
-    this.gamepad.onConnected = (id, layout) => {
-      gameEvents.emit("gamepad-state", id, layout);
-    };
-
     const unsubPresence = gameEvents.on("presence-updated", (players) => {
       this.remotePlayers.sync(players);
     });
@@ -360,6 +366,12 @@ export class OfficeScene extends Phaser.Scene {
     // Listening for the open events rather than only setting the flag where
     // they are emitted means a game opened any other way — the ?pinball=1 and
     // ?board=1 links, say — still stops the character walking about behind it.
+    const unsubArcadeOpen = gameEvents.on("open-arcade", () => {
+      this.arcadeOpen = true;
+    });
+    const unsubArcadeClosed = gameEvents.on("arcade-closed", () => {
+      this.arcadeOpen = false;
+    });
     const unsubPinballOpen = gameEvents.on("open-pinball", () => {
       this.pinballOpen = true;
     });
@@ -391,9 +403,6 @@ export class OfficeScene extends Phaser.Scene {
       }
       if (target === "elevator") {
         this.elevatorOpen = true;
-        // Opened by walking in with a direction held; that direction must
-        // not also drive the menu.
-        this.dialogArmed = false;
         gameEvents.emit("open-elevator");
         return;
       }
@@ -454,6 +463,8 @@ export class OfficeScene extends Phaser.Scene {
       unsubBoardClosed();
       unsubPinballOpen();
       unsubPinballClosed();
+      unsubArcadeOpen();
+      unsubArcadeClosed();
       unsubElevatorClosed();
       unsubPongOpen();
       unsubPongClosed();
@@ -697,6 +708,14 @@ export class OfficeScene extends Phaser.Scene {
       .setVisible(false);
     this.cauldronPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
 
+    this.arcadePrompt = this.add
+      .text(0, 0, "Press E to play", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
+      .setResolution(window.devicePixelRatio * 2)
+      .setOrigin(0.5, 1)
+      .setDepth(20)
+      .setVisible(false);
+    this.arcadePrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+
     this.bucketPrompt = this.add
       .text(0, 0, "Press E for ping pong", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
       .setResolution(window.devicePixelRatio * 2)
@@ -771,7 +790,14 @@ export class OfficeScene extends Phaser.Scene {
       if (!isTap(start, { x: pointer.x, y: pointer.y, at: pointer.upTime })) return;
 
       // Anything with a panel over the office is driving its own input
-      if (this.terminalOpen || this.whiteboardOpen || this.pinballOpen || this.pingPongOpen) return;
+      if (
+        this.terminalOpen ||
+        this.whiteboardOpen ||
+        this.pinballOpen ||
+        this.pingPongOpen ||
+        this.arcadeOpen
+      )
+        return;
       if (this.interactionManager.interactionMenu.visible) return;
 
       const world = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
@@ -852,38 +878,9 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * Send the open dialog somewhere to put its focus ring.
-   *
-   * Up and left step back, down and right step forward: a dialog's controls
-   * are a single loop, whichever way they happen to be laid out, so both axes
-   * mean the same thing and neither can strand you. A is the press, and it is
-   * reported on release too, for the mic's hold-to-talk.
-   */
-  private updateDialogNavigation() {
-    const pad = this.gamepad;
-    if (!this.dialogArmed) {
-      const held = pad.velocity(MOVE_SPEED);
-      if (held.vx !== 0 || held.vy !== 0 || this.player.hasKeyboardInput()) return;
-      this.dialogArmed = true;
-    }
-
-    const back =
-      pad.justPressed("menuUp") ||
-      pad.justPressed("menuLeft") ||
-      pad.menuDirectionEdge() === -1 ||
-      pad.menuDirectionEdgeX() === -1;
-    const forward =
-      pad.justPressed("menuDown") ||
-      pad.justPressed("menuRight") ||
-      pad.menuDirectionEdge() === 1 ||
-      pad.menuDirectionEdgeX() === 1;
-
-    if (back) gameEvents.emit("hud-focus-move", -1);
-    else if (forward) gameEvents.emit("hud-focus-move", 1);
-
-    if (pad.justPressed("interact")) gameEvents.emit("hud-confirm", "down");
-    if (pad.justReleased("interact")) gameEvents.emit("hud-confirm", "up");
+  /** The pad's push on the character; nothing while a dialog has the screen. */
+  private padVelocity() {
+    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(MOVE_SPEED);
   }
 
   update(_time: number, delta: number) {
@@ -907,7 +904,7 @@ export class OfficeScene extends Phaser.Scene {
       } else {
         // The steps are done; the keys work, except the way back, until
         // they have been let go once. Doors are live again from here.
-        const wanted = this.player.inputVelocity(this.gamepad.velocity(MOVE_SPEED));
+        const wanted = this.player.inputVelocity(this.padVelocity());
         this.arrival.release(wanted.vx !== 0 || wanted.vy !== 0);
         this.player.drive(this.arrival.allow(wanted));
         this.doorManager.updateDoors();
@@ -922,39 +919,18 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    // Shoulder buttons cycle HUD panels, Back closes the open one. The HUD is
-    // React, so this travels over the event bus rather than through the scene.
-    if (this.gamepad.justPressed("panelPrev")) gameEvents.emit("hud-cycle-panel", -1);
-    if (this.gamepad.justPressed("panelNext")) gameEvents.emit("hud-cycle-panel", 1);
-    if (this.gamepad.justPressed("panelClose")) gameEvents.emit("hud-close-panel");
-
-    // B is Escape. Every prompt in the game already closes on Escape, so
-    // rather than teaching each one about controllers, the button becomes the
-    // key — which also covers any dialog added later.
-    if (this.gamepad.justPressed("cancel")) {
-      const escape = new KeyboardEvent("keydown", {
-        key: "Escape",
-        code: "Escape",
-        keyCode: 27,
-        which: 27,
-        bubbles: true,
-        cancelable: true,
-      });
-      // One dispatch is enough: it bubbles document → window, so listeners on
-      // either receive it exactly once
-      document.dispatchEvent(escape);
-    }
-
+    // A dialog is up: the HUD's controller driver has the pad, the keys
+    // belong to the dialog, and the character stands still under it.
     if (
       this.terminalOpen ||
       this.whiteboardOpen ||
       this.pinballOpen ||
       this.pingPongOpen ||
+      this.arcadeOpen ||
       this.elevatorOpen ||
+      dialogOpen() ||
       isInputFocused()
     ) {
-      // A dialog is up, so the pad drives its buttons instead of the character
-      this.updateDialogNavigation();
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
       return;
@@ -962,7 +938,7 @@ export class OfficeScene extends Phaser.Scene {
 
     // A key or a stick means the player has taken over, and the tap they
     // made a moment ago is no longer what they want
-    const padVelocity = this.gamepad.velocity(MOVE_SPEED);
+    const padVelocity = this.padVelocity();
     const steering = this.navigator.active ? this.navigator.step(this.feet(), MOVE_SPEED) : null;
 
     if (
@@ -1041,6 +1017,24 @@ export class OfficeScene extends Phaser.Scene {
       if (atBucket && interactPressed) {
         this.bucketPrompt?.setVisible(false);
         gameEvents.emit("open-pingpong");
+        return;
+      }
+    }
+
+    // The arcade cabinet: walk up, press E, pick a game
+    if (this.arcadeZone) {
+      const distance = Phaser.Math.Distance.Between(
+        this.player.sprite.x,
+        this.player.sprite.y,
+        this.arcadeZone.x,
+        this.arcadeZone.y,
+      );
+      const atArcade = distance < CAULDRON_INTERACT_DISTANCE;
+      this.arcadePrompt?.setVisible(atArcade && !this.arcadeOpen);
+      if (atArcade) this.arcadePrompt?.setPosition(this.arcadeZone.x, this.arcadeZone.y - 44);
+      if (atArcade && interactPressed) {
+        this.arcadePrompt?.setVisible(false);
+        gameEvents.emit("open-arcade");
         return;
       }
     }

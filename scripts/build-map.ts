@@ -54,7 +54,7 @@ for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby-castle-atlantic.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
-  ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball")],
+  ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball", ["arcade"])],
   ["floor.json", buildFloorSpec],
   ...premises,
 ] as const) {

@@ -2,7 +2,7 @@
 
 import { Mic } from "lucide-react";
 import { useSpeechInput } from "@/lib/hooks/useSpeechInput";
-import { PAD_HOLD_ATTR } from "@/lib/hooks/useGamepadFocus";
+import { PAD_HOLD_ATTR } from "@/lib/gamepad/focus";
 
 interface MicButtonProps {
   /** Called on release with everything recognised while held. Never called with empty text. */

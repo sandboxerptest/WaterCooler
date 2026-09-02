@@ -1,7 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Music, VolumeX, X } from "lucide-react";
+import { arcadeMusic } from "@/lib/arcade/music";
+import FullscreenButton, { useFullscreen } from "./FullscreenButton";
+import PadLegend from "./PadLegend";
+import { useMachinePad } from "@/lib/hooks/useMachinePad";
+import { PAD_OWN_ATTR } from "@/lib/gamepad/dialogs";
 import { gameEvents } from "@/lib/events";
 import { currentRoom } from "@/lib/room-client";
 import { loadPlayerName } from "@/lib/persistence";
@@ -166,15 +171,24 @@ export default function Pinball() {
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(overlayRef);
   const gameRef = useRef<PinballState | null>(null);
   const keysRef = useRef({ left: false, right: false, launch: false });
   const submittedRef = useRef(false);
   /** Which side each finger is on. A map, because two thumbs is the point. */
   const touchesRef = useRef(new Map<number, FlipperSide>());
 
+  const musicMuted = useSyncExternalStore(
+    arcadeMusic.subscribe,
+    () => arcadeMusic.isMuted(),
+    () => false,
+  );
+
   const close = useCallback(() => {
     setOpen(false);
     touchesRef.current.clear();
+    arcadeMusic.closePinball();
     gameEvents.emit("pinball-closed");
   }, []);
 
@@ -200,6 +214,7 @@ export default function Pinball() {
       startGame();
       void loadScores();
       setOpen(true);
+      arcadeMusic.openPinball();
     });
     // ?pinball=1 opens it directly, the way ?board=1 opens the whiteboard.
     // Routed through the same event, so there is only one way in.
@@ -209,8 +224,19 @@ export default function Pinball() {
     return unsubscribe;
   }, [startGame, loadScores]);
 
-  // Escape closes, the way every other panel in the game does — which also
-  // means the pad's B button closes it, since that is dispatched as Escape.
+  // The controller, by the bindings printed on the table: B or View leaves,
+  // X fills the screen, Y is the music, Menu plays again once the balls are
+  // gone. The flippers and plunger are read by the loop itself.
+  useMachinePad(open, {
+    close,
+    fullscreen: fullscreen.toggle,
+    mute: () => arcadeMusic.setMuted(!arcadeMusic.isMuted()),
+    restart: () => {
+      if (gameRef.current?.status === "over") startGame();
+    },
+  });
+
+  // Escape closes, the way every other panel in the game does.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -360,6 +386,7 @@ export default function Pinball() {
 
   return (
     <div
+      ref={overlayRef}
       className="pinball-overlay"
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
@@ -374,20 +401,33 @@ export default function Pinball() {
       }}
       role="dialog"
       aria-label="Cauldron pinball"
+      {...{ [PAD_OWN_ATTR]: "" }}
     >
       <div className="pixel-panel pinball-panel">
-        <div className="pinball-head">
-          <span style={{ fontSize: "10px" }}>Cauldron</span>
-          <button
-            type="button"
-            className="pixel-icon-btn"
-            style={{ width: 28, height: 28 }}
-            onClick={close}
-            title="Close (Esc)"
-            aria-label="Close pinball"
-          >
-            <X size={12} />
-          </button>
+        <div className="pinball-head arcade-head">
+          <span className="arcade-head__title">Cauldron</span>
+          <span className="arcade-head__buttons">
+            <button
+              type="button"
+              className="pixel-icon-btn"
+              onClick={() => arcadeMusic.setMuted(!musicMuted)}
+              title={musicMuted ? "Music off — turn it on" : "Music on — turn it off"}
+              aria-label={musicMuted ? "Turn the music on" : "Turn the music off"}
+              aria-pressed={musicMuted}
+            >
+              {musicMuted ? <VolumeX size={12} /> : <Music size={12} />}
+            </button>
+            <FullscreenButton control={fullscreen} what="pinball" />
+            <button
+              type="button"
+              className="pixel-icon-btn"
+              onClick={close}
+              title="Close (Esc)"
+              aria-label="Close pinball"
+            >
+              <X size={12} />
+            </button>
+          </span>
         </div>
 
         {/* Everything inside here answers to a thumb: the side of this box you
@@ -456,10 +496,20 @@ export default function Pinball() {
               Tap either side of the screen to flip · hold to pull the plunger
             </div>
             <div className="pinball-hint pinball-hint--keys">
-              {ready ? "Hold SPACE to pull, let go to fire" : "← → or A/D flip"}
-              <br />
-              Pad: shoulders flip, A fires · Esc or B to leave
+              {ready ? "Hold SPACE to pull, let go to fire" : "← → or A/D flip · Esc leaves"}
             </div>
+            <PadLegend
+              entries={[
+                ["act", "plunger"],
+                ["back", "leave"],
+                ["restart", "again"],
+                ["mute", "music"],
+                ["fullscreen", "full screen"],
+                ["close", "leave"],
+                ["talk", "talk"],
+              ]}
+            />
+            <div className="pinball-hint pinball-hint--keys">LB RB or ← → flip</div>
           </div>
         </div>
       </div>

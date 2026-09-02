@@ -99,7 +99,7 @@ export const STANDABLE: readonly number[] = [WALLS.floor, WALLS.topShadow];
  * which becomes the collision box, and the point of interest is the floor
  * in front of it, where you stand to play. The scene finds it by name.
  */
-export type Game = "pong" | "pinball";
+export type Game = "pong" | "pinball" | "arcade";
 
 export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
   pong: {
@@ -115,30 +115,35 @@ export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
     region: { label: "pinball machine", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 3, layers: [] },
     poi: { name: "Pinball machine", tx: 16, ty: 5, facing: "up" },
   },
+  arcade: {
+    // public/sprites/arcade_cabinet_96x120.png, beside the pinball machine
+    // and against the same wall.
+    region: { label: "arcade cabinet", sx: 0, sy: 0, sw: 2, sh: 2, dx: 12, dy: 3, layers: [] },
+    poi: { name: "Arcade cabinet", tx: 13, ty: 5, facing: "up" },
+  },
 };
 
-export function buildOfficeSpec(source: SourceMap, game?: Game): RoomSpec {
+export function buildOfficeSpec(source: SourceMap, game?: Game, more: Game[] = []): RoomSpec {
   const picked = harvest(source, REGIONS);
+  const games = game ? [game, ...more] : [];
   // Harvested apart from the decor: the decor's old collision boxes are
-  // deliberately left behind (the room is open floor), but the game's are
-  // wanted — and if the old map drew none, the whole of it is solid.
-  const corner = game ? harvest(source, [GAMES[game].region]) : null;
-  const cornerBoxes = corner
-    ? corner.collisions.length
-      ? corner.collisions
-      : [regionBox(GAMES[game!].region)]
-    : [];
+  // deliberately left behind (the room is open floor), but the games' are
+  // wanted — and if the old map drew none, the whole of each is solid.
+  const corners = games.map((g) => ({ game: g, corner: harvest(source, [GAMES[g].region]) }));
+  const cornerBoxes = corners.flatMap(({ game: g, corner }) =>
+    corner.collisions.length ? corner.collisions : [regionBox(GAMES[g].region)],
+  );
 
   return {
     width: WIDTH,
     height: HEIGHT,
     tileSize: TILE,
     walls: WALLS,
-    placements: [...picked.placements, ...(corner?.placements ?? [])],
+    placements: [...picked.placements, ...corners.flatMap(({ corner }) => corner.placements)],
     // No agent seats: an open room. The only interaction point is the game
     // in the corner, when a lobby has one; the wall collisions the generator
     // adds and the game's own boxes are the only solid things in it.
-    pois: [WHITEBOARD.poi, ...(game ? [GAMES[game].poi] : [])],
+    pois: [WHITEBOARD.poi, ...games.map((g) => GAMES[g].poi)],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],
     collisions: cornerBoxes,
     cutout: CUTOUT,

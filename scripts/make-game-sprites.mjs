@@ -195,6 +195,130 @@ function pinball() {
   return c;
 }
 
+/**
+ * The arcade cabinet: upright, a marquee on top, a screen with something
+ * on it, a control panel with a stick and three buttons, a coin door.
+ */
+function arcade() {
+  const c = canvas(96, 120);
+  const { set, rect, outline, disc } = c;
+  const purple = [92, 64, 140, 255];
+  const purpleLit = [128, 96, 184, 255];
+  const purpleDark = [64, 44, 100, 255];
+  const screen = [16, 27, 36, 255];
+  const green = [95, 191, 79, 255];
+  const orange = [242, 145, 61, 255];
+  // Shadow and feet.
+  for (let y = 110; y < 116; y++)
+    for (let x = 12 + (y - 110) / 2; x < 84 - (y - 110) / 2; x++) set(x | 0, y, shadow);
+  rect(16, 106, 80, 110, ink);
+  // Body: tall, narrower at the top, with lit edges.
+  rect(16, 2, 80, 108, ink);
+  rect(17, 3, 79, 107, purple);
+  rect(17, 3, 79, 5, purpleLit);
+  for (let y = 3; y < 107; y++) {
+    set(17, y, purpleLit);
+    set(78, y, purpleDark);
+  }
+  // Marquee with lights and the word.
+  rect(20, 6, 76, 20, ink);
+  rect(21, 7, 75, 19, cabinetDark);
+  rect(23, 9, 73, 17, red);
+  for (let x = 24; x < 72; x += 4) set(x, 8, x % 8 ? yellow : white);
+  for (let x = 24; x < 72; x += 4) set(x, 18, x % 8 ? yellow : white);
+  // "ARCADE" as a row of blocky letters.
+  const letters = [
+    [26, 12, 3],
+    [26, 13, 1],
+    [28, 13, 1],
+    [26, 14, 3],
+    [26, 15, 1],
+    [28, 15, 1],
+    [31, 12, 3],
+    [31, 13, 1],
+    [33, 13, 1],
+    [31, 14, 3],
+    [31, 15, 1],
+    [33, 15, 1],
+    [36, 12, 3],
+    [36, 13, 1],
+    [36, 14, 1],
+    [36, 15, 3],
+    [41, 12, 3],
+    [41, 13, 1],
+    [43, 13, 1],
+    [41, 14, 3],
+    [41, 15, 1],
+    [43, 15, 1],
+    [46, 12, 2],
+    [46, 13, 1],
+    [48, 13, 1],
+    [46, 14, 1],
+    [48, 14, 1],
+    [46, 15, 2],
+    [51, 12, 3],
+    [51, 13, 1],
+    [51, 14, 2],
+    [51, 15, 3],
+    [56, 12, 3],
+    [56, 13, 1],
+    [56, 14, 3],
+    [56, 15, 1],
+    [56, 16, 3],
+  ];
+  for (const [x, y, w] of letters) for (let i = 0; i < w; i++) set(x + i, y, white);
+  // Screen: dark glass with a game on it — bricks, a ball, a snake, a bird.
+  rect(20, 24, 76, 66, ink);
+  rect(21, 25, 75, 65, screen);
+  for (let i = 0; i < 6; i++) {
+    set(26 + i * 8, 29, red);
+    set(27 + i * 8, 29, red);
+    set(28 + i * 8, 29, red);
+    set(26 + i * 8, 31, orange);
+    set(27 + i * 8, 31, orange);
+    set(28 + i * 8, 31, orange);
+    set(26 + i * 8, 33, yellow);
+    set(27 + i * 8, 33, yellow);
+    set(28 + i * 8, 33, yellow);
+  }
+  disc(52, 44, 1, white);
+  for (let i = 0; i < 9; i++) set(26 + i, 52, green);
+  for (let i = 0; i < 4; i++) set(34, 52 + i, green);
+  set(35, 55, [182, 242, 122, 255]);
+  disc(62, 50, 3, yellow);
+  set(63, 49, white);
+  set(66, 50, red);
+  rect(40, 60, 56, 62, silver);
+  for (let i = 0; i < 20; i++) set(24 + i, 27 + i, [255, 255, 255, 50]);
+  // Control panel, sloped: a stick and three buttons.
+  rect(18, 66, 78, 80, ink);
+  rect(19, 67, 77, 79, cabinetDark);
+  rect(19, 67, 77, 69, cabinetLit);
+  disc(32, 74, 3, ink);
+  disc(32, 71, 3, red);
+  set(31, 70, white);
+  for (let y = 72; y < 76; y++) set(32, y, silver);
+  for (const [bx, col] of [
+    [52, yellow],
+    [60, green],
+    [68, blue],
+  ]) {
+    disc(bx, 74, 3, ink);
+    disc(bx, 74, 2, col);
+    set(bx - 1, 73, white);
+  }
+  // Front with the coin door.
+  rect(18, 80, 78, 106, ink);
+  rect(19, 81, 77, 105, purpleDark);
+  rect(38, 88, 58, 100, ink);
+  rect(39, 89, 57, 99, cabinet);
+  set(46, 92, yellow);
+  set(50, 92, yellow);
+  rect(44, 95, 52, 96, ink);
+  outline(15, 1, 81, 109);
+  return c;
+}
+
 let T = null;
 const crc32 = (buf) => {
   if (!T) {
@@ -242,3 +366,4 @@ function save(name, c) {
 }
 save("pingpong_table_96x72.png", table());
 save("pinball_machine_96x120.png", pinball());
+save("arcade_cabinet_96x120.png", arcade());

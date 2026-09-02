@@ -22,6 +22,17 @@ function getAudio(): HTMLAudioElement {
   return sharedAudio;
 }
 
+/** Step the room's music aside for a game's own song. */
+export function pauseBgm() {
+  sharedAudio?.pause();
+}
+
+/** Bring it back, if the person had it on. */
+export function resumeBgm() {
+  if (!sharedAudio || readStoredVolume() <= 0) return;
+  sharedAudio.play().catch(() => {});
+}
+
 export interface BgmState {
   volume: number;
   setVolume: (percent: number) => void;
