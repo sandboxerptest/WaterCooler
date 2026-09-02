@@ -95,7 +95,7 @@ export const SIDEBAR_MAX_WIDTH = 680;
 export const SIDEBAR_DEFAULT_WIDTH = 380;
 
 // ── Audio ────────────────────────────────────────────────
-export const DEFAULT_BGM_VOLUME = 0.45;
+export const DEFAULT_BGM_VOLUME = 0;
 
 // ── Limits ───────────────────────────────────────────────
 export const MAX_CHAT = 500;

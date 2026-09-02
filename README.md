@@ -218,6 +218,15 @@ clock skew, nonce replay, then the HMAC-SHA256 signature over
 consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
 is not mounted at all when there is no secret to verify against.
 
+### Files with a task
+
+The paperclip beside the chat box attaches files to the next task, up to
+eight at a time and 25 MB each. They are uploaded as they are chosen and
+kept under `UPLOADS_DIR` (beside the room database by default, on the volume
+in the image). A Claude agent finds them copied into its workspace under
+`attachments/`, with a note at the end of the task saying so; Mettara gets
+them uploaded to the group and handed over with the message.
+
 ### Voice chat by proximity
 
 The microphone button in the bottom bar switches on voice chat. Audio goes

@@ -14,6 +14,7 @@
  * Docs: https://connect-a12e4c.gitlab.io/libraries/nodejs/
  */
 
+import { readFile } from "node:fs/promises";
 import { createLogger } from "../logger";
 import { readMettaraConfig, sourceUserId, type MettaraConfig } from "./config";
 
@@ -73,7 +74,9 @@ export interface Sdk {
       groupId: string,
       userId: string,
       content: string,
+      fileIds?: string[],
     ): Promise<SentMessage>;
+    uploadFile(groupId: string, file: Uint8Array, filename: string): Promise<{ id: string }>;
     listAis?(groupId: string): Promise<Array<{ technical_name?: string; display_name?: string }>>;
   };
 }
@@ -134,6 +137,8 @@ export interface MettaraTurn {
   conversationId?: string;
   /** AI technical name chosen in the HUD, if any. */
   aiName?: string;
+  /** Files that came with the task, to upload and hand over with the message. */
+  attachments?: { name: string; path: string }[];
 }
 
 export interface MettaraReply {
@@ -225,6 +230,20 @@ export async function runMettaraTurn(turn: MettaraTurn): Promise<MettaraReply> {
     log.info(`Opened Mettara conversation ${conversationId} for ${displayName}`);
   }
 
-  const reply = await client.sendMessage(conversationId, token.groupId, token.userId, opening);
+  // Files ride with the message, uploaded to the group first.
+  const fileIds: string[] = [];
+  for (const file of turn.attachments ?? []) {
+    const bytes = new Uint8Array(await readFile(file.path));
+    const uploaded = await client.uploadFile(token.groupId, bytes, file.name);
+    fileIds.push(uploaded.id);
+  }
+
+  const reply = await client.sendMessage(
+    conversationId,
+    token.groupId,
+    token.userId,
+    opening,
+    fileIds.length ? fileIds : undefined,
+  );
   return { text: reply.content ?? "", conversationId };
 }

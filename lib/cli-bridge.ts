@@ -11,11 +11,13 @@
 import { type IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { spawn, type ChildProcess } from "child_process";
-import { writeFileSync, mkdirSync, unlinkSync } from "fs";
+import { writeFileSync, mkdirSync, unlinkSync, copyFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
+import { attachmentNote, attachmentRefs } from "./attachments";
+import { resolveUpload, type StoredUpload } from "./server/uploads";
 import { ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
 import { onRunCompleted, type CompletedRun } from "./server/achievement-rules";
 import { humansInRoom, recordActivity } from "./server/presence-socket";
@@ -398,19 +400,38 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
 
   const startedAt = Date.now();
   const seatLabel = params.seatLabel as string | undefined;
+  const workspaceDir = provider.usesWorkspaces
+    ? ensureSeatWorkspace(seatLabel ?? sessionKey, state.room)
+    : undefined;
+  // Files that came with the task: into the seat's workspace, with a note
+  // in the message saying so, for a CLI; handed over as files to a service.
+  const files = attachmentRefs(params.attachments)
+    .map((ref) => resolveUpload(state.room, ref.id))
+    .filter((f): f is StoredUpload => f !== null);
+  let attached: { name: string; path: string }[] = files;
+  let taskMessage = message;
+  if (workspaceDir && files.length) {
+    const folder = join(workspaceDir, "attachments");
+    mkdirSync(folder, { recursive: true });
+    attached = files.map((f) => {
+      const path = join(folder, f.name);
+      copyFileSync(f.path, path);
+      return { name: f.name, path };
+    });
+    taskMessage += attachmentNote(attached.map((f) => `attachments/${f.name}`));
+  }
   const runOptions = {
-    message,
+    message: taskMessage,
     personality: buildPersonality(state.room, params),
     // A session belongs to the provider that opened it: the map is keyed by both.
     sessionId: state.sessionMap.get(`${provider.id}:${sessionKey}`),
     // Attach the MCP server for worker dispatch if we have a roster
     mcpConfigPath: writeMcpConfig(state.room),
     model: (params.model as string | undefined) ?? process.env.WATERCOOLER_MODEL,
-    workspaceDir: provider.usesWorkspaces
-      ? ensureSeatWorkspace(seatLabel ?? sessionKey, state.room)
-      : undefined,
+    workspaceDir,
     seatLabel,
     sessionKey,
+    attachments: attached.length ? attached : undefined,
   };
 
   // Both kinds of run end the same way, so the reporting — spend, activity,

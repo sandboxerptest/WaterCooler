@@ -58,6 +58,8 @@ ENV ROOM_DB_PATH=/data/watercooler.sqlite
 ENV AGENT_WORKSPACE_ROOT=/data/agent-workspaces
 # The company's data lives on the volume too, and is seeded on first boot
 ENV ERP_DB_PATH=/data/erp.sqlite
+# Files people attach to tasks, kept with the rest
+ENV UPLOADS_DIR=/data/uploads
 ENV AGENT_PROVIDER=claude-api
 
 EXPOSE 3000

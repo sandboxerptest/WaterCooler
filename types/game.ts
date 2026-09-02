@@ -61,9 +61,17 @@ export type TaskStatus =
   | "failed"
   | "interrupted";
 
+/** A file that came with a task, as the browser sends it. */
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  size: number;
+}
+
 export interface TaskItem {
   taskId: string;
   message: string;
+  attachments?: TaskAttachment[];
   status: TaskStatus;
   runId?: string;
   seatId?: string;

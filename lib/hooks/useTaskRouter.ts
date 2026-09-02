@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject } from "react";
-import type { SeatState, TaskItem } from "@/types/game";
+import type { SeatState, TaskAttachment, TaskItem } from "@/types/game";
 import type { GatewayClient } from "../gateway";
 import type { GatewayFrame } from "../gateway-types";
 import { gameEvents } from "../events";
@@ -27,6 +27,9 @@ export function useTaskRouter(refs: TaskRouterRefs) {
   const sessionQueueRef = useRef<
     Map<string, Array<{ taskId: string; message: string; seatId?: string }>>
   >(new Map());
+  // Files for a task not yet in state: the send can run before React has
+  // committed the task, so they are kept here until it goes out.
+  const attachmentsRef = useRef<Map<string, TaskAttachment[]>>(new Map());
 
   const sendTaskToGateway = useCallback(
     (taskId: string, message: string, seatId?: string) => {
@@ -60,6 +63,8 @@ export function useTaskRouter(refs: TaskRouterRefs) {
           sessionKey,
           message,
           idempotencyKey: taskId,
+          // Files uploaded with the task; the bridge hands them to the agent.
+          attachments: task?.attachments ?? attachmentsRef.current.get(taskId),
           // Passed through to the Auggie bridge for personality injection;
           // OpenClaw ignores unknown params.
           seatLabel: seat?.label,
@@ -113,19 +118,22 @@ export function useTaskRouter(refs: TaskRouterRefs) {
   );
 
   const assignTask = useCallback(
-    (message: string, seatId?: string) => {
+    (message: string, seatId?: string, attachments?: TaskAttachment[]) => {
       const client = refs.clientRef.current;
       if (!client || client.status !== "connected") return;
 
       const taskId = refs.nextTaskId();
       const sessionKey = refs.activeSessionKey.current ?? MAIN_SESSION_KEY;
       const actorName = seatId ? resolveSeatLabelForTask(refs.seats.current, seatId) : undefined;
+      const files = attachments?.length ? attachments : undefined;
+      if (files) attachmentsRef.current.set(taskId, files);
 
       refs.dispatch.current({
         type: "ADD_TASK",
         task: {
           taskId,
           message,
+          attachments: files,
           status: "submitted",
           sessionKey,
           seatId,
@@ -139,7 +147,8 @@ export function useTaskRouter(refs: TaskRouterRefs) {
           id: chatId(),
           runId: taskId,
           role: "user",
-          content: message,
+          // The bubble shows what went with the task; the agent gets the files themselves.
+          content: files ? `${message}\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : message,
           timestamp: new Date().toISOString(),
           sessionKey,
         },

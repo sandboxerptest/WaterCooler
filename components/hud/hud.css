@@ -1652,3 +1652,51 @@
 .hud-mic--blocked {
   color: var(--pixel-red);
 }
+
+/* ── Files attached to a task ────────────────────────── */
+
+.hud-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px 6px;
+  align-items: center;
+}
+
+.hud-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 8px;
+  color: var(--pixel-text);
+}
+
+.hud-attachment__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.hud-attachment__remove {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pixel-muted);
+  cursor: pointer;
+}
+
+.hud-attachment__remove:hover {
+  color: var(--pixel-red);
+}
+
+.hud-attachments__error {
+  font-size: 8px;
+  color: var(--pixel-red);
+}

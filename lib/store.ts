@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import React from "react";
-import type { SeatState, TaskItem, GatewayConfig, ChatMessage } from "@/types/game";
+import type { SeatState, TaskItem, GatewayConfig, ChatMessage, TaskAttachment } from "@/types/game";
 import type { StudioSnapshot } from "@/types/game";
 import { gameEvents } from "./events";
 import { type PersistedSeatConfig, loadGatewayConfig, loadPlayerName } from "./persistence";
@@ -40,7 +40,7 @@ interface StudioContextValue {
   state: StudioSnapshot;
   connect: (config?: GatewayConfig) => void;
   disconnect: () => void;
-  assignTask: (message: string, seatId?: string) => void;
+  assignTask: (message: string, seatId?: string, attachments?: TaskAttachment[]) => void;
   updateSeatConfig: (seatId: string, patch: Partial<SeatState>) => void;
   newSession: () => void;
   switchSession: (sessionKey: string) => void;

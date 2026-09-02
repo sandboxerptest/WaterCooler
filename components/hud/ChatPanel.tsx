@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { SendHorizontal } from "lucide-react";
+import { Paperclip, SendHorizontal, X } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import MicButton from "./MicButton";
 import { gameEvents } from "@/lib/events";
 import type { ChatMessage, SessionRecord, TaskItem } from "@/types/game";
 import { findTask } from "@/lib/reducer";
+import { MAX_ATTACHMENTS, formatBytes, type AttachmentRef } from "@/lib/attachments";
+import { uploadFiles } from "@/lib/uploads-client";
 import HudFlyout from "./HudFlyout";
 import MessageBubble from "./MessageBubble";
 import SessionSwitcher from "./SessionSwitcher";
@@ -28,6 +30,31 @@ export default function ChatPanel({
   const { assignTask, sayInRoom } = useStudio();
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Files to hand over with the next task. Uploaded as they are chosen.
+  const [attachments, setAttachments] = useState<AttachmentRef[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const attach = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
+    setUploadError(null);
+    if (attachments.length + files.length > MAX_ATTACHMENTS) {
+      setUploadError(`At most ${MAX_ATTACHMENTS} files on a task.`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const uploaded = await uploadFiles(files);
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const actorByRunId = useMemo(() => {
@@ -68,7 +95,7 @@ export default function ChatPanel({
 
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed && !(mode === "task" && attachments.length)) return;
 
     if (mode === "say") {
       // Talking to the people in the room, not to an agent — this works even
@@ -79,9 +106,11 @@ export default function ChatPanel({
       return;
     }
 
-    if (!isConnected) return;
-    assignTask(trimmed);
+    if (!isConnected || uploading) return;
+    assignTask(trimmed || "See the attached files.", undefined, attachments);
     setInput("");
+    setAttachments([]);
+    setUploadError(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
@@ -179,7 +208,50 @@ export default function ChatPanel({
           )}
         </div>
 
+        {mode === "task" && (attachments.length > 0 || uploadError) && (
+          <div className="hud-attachments">
+            {attachments.map((file) => (
+              <span key={file.id} className="hud-attachment" title={formatBytes(file.size)}>
+                <Paperclip size={9} aria-hidden />
+                <span className="hud-attachment__name">{file.name}</span>
+                <button
+                  type="button"
+                  className="hud-attachment__remove"
+                  onClick={() => setAttachments((prev) => prev.filter((f) => f.id !== file.id))}
+                  title="Remove"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  <X size={9} />
+                </button>
+              </span>
+            ))}
+            {uploadError && <span className="hud-attachments__error">{uploadError}</span>}
+          </div>
+        )}
+
         <div className="hud-chat-input-row">
+          {mode === "task" && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => void attach(event.target.files)}
+              />
+              <button
+                type="button"
+                className="pixel-icon-btn"
+                style={{ width: 40, height: 40, minWidth: 40, minHeight: 40 }}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!isConnected || uploading}
+                title={uploading ? "Uploading…" : "Attach files for the agent"}
+                aria-label="Attach files"
+              >
+                <Paperclip size={16} />
+              </button>
+            </>
+          )}
           <textarea
             ref={inputRef}
             className="pixel-input"
@@ -206,7 +278,10 @@ export default function ChatPanel({
             className="pixel-icon-btn pixel-icon-btn--primary"
             style={{ width: 40, height: 40, minWidth: 40, minHeight: 40 }}
             onClick={handleSend}
-            disabled={(mode === "task" && !isConnected) || !input.trim()}
+            disabled={
+              (mode === "task" && (!isConnected || uploading)) ||
+              (!input.trim() && !(mode === "task" && attachments.length > 0))
+            }
             title={mode === "say" ? "Say it" : "Send"}
           >
             <SendHorizontal size={16} />

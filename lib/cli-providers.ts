@@ -45,6 +45,8 @@ export interface CliRunOptions {
   seatLabel?: string;
   /** Bridge session key — one conversation per seat. */
   sessionKey?: string;
+  /** Files that came with the task, on disk, for providers that take files themselves. */
+  attachments?: { name: string; path: string }[];
 }
 
 export interface CliRunSpec {
@@ -391,6 +393,7 @@ const mettaraProvider: CliProvider = {
       personality: options.personality,
       conversationId: options.sessionId,
       aiName: options.model,
+      attachments: options.attachments,
     });
     // The conversation id rides home as the session id, so the bridge's
     // existing sessionKey map resumes this seat's thread on its next turn
