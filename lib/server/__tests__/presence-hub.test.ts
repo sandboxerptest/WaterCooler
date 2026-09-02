@@ -28,12 +28,21 @@ describe("capacity", () => {
     expect(hub.count).toBe(MAX_HUMAN_PLAYERS);
   });
 
-  it("turns away the fifth human with the cap in the refusal", () => {
+  it("turns away one human more than the cap, with the cap in the refusal", () => {
     for (let i = 0; i < MAX_HUMAN_PLAYERS; i++) join(`p${i}`);
 
-    const result = join("p4");
+    const result = join(`p${MAX_HUMAN_PLAYERS}`);
     expect(result).toEqual({ ok: false, reason: "full", capacity: MAX_HUMAN_PLAYERS });
     expect(hub.count).toBe(MAX_HUMAN_PLAYERS);
+  });
+
+  it("places a player where a scene says, however far that is from before", () => {
+    join("p0");
+    hub.move("p0", { x: 10, y: 10, facing: "down", moving: false });
+    const placed = hub.place("p0", { x: 1400, y: 655, facing: "up" });
+    expect(placed).toMatchObject({ x: 1400, y: 655, facing: "up", moving: false });
+    expect(hub.snapshot().find((p) => p.id === "p0")).toMatchObject({ x: 1400, y: 655 });
+    expect(hub.place("nobody", { x: 0, y: 0, facing: "down" })).toBeNull();
   });
 
   it("frees a slot when someone leaves", () => {

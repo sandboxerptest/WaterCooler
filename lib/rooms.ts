@@ -54,10 +54,31 @@ export function floorRoomSlug(slug: string, level: number): string {
   return normaliseRoomSlug(`${slug}-floor-${level}`);
 }
 
-/** Which room this browser is in, taken from /r/<slug>[/floor/<n>] or ?room=<slug>. */
+/**
+ * The outdoors are rooms too: everyone on the world map is in one place,
+ * and everyone on a campus or the island in another. That is what lets
+ * people see and hear each other out there, and not only through a door.
+ */
+export const WORLD_ROOM_SLUG = "world";
+
+export function campusRoomSlug(campus: string): string {
+  return normaliseRoomSlug(`campus-${campus}`);
+}
+
+/** The room an outdoor address names, or null for anywhere else. */
+export function outdoorRoomFromPath(pathname: string): string | null {
+  if (pathname === "/world" || pathname === "/world/") return WORLD_ROOM_SLUG;
+  const campus = pathname.match(/^\/campus\/([a-z0-9-]+)\/?$/);
+  return campus ? campusRoomSlug(campus[1]) : null;
+}
+
+/** Which room this browser is in, taken from /r/<slug>[/floor/<n>], /world, /campus/<slug> or ?room=<slug>. */
 export function roomFromLocation(location: { pathname: string; search: string }): string {
   const path = parseRoomPath(location.pathname);
   if (path) return path.floor !== null ? floorRoomSlug(path.slug, path.floor) : path.slug;
+
+  const outdoors = outdoorRoomFromPath(location.pathname);
+  if (outdoors) return outdoors;
 
   const params = new URLSearchParams(location.search);
   const query = params.get("room");

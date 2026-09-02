@@ -35,12 +35,15 @@ export class RemotePlayer {
   private bubble: ChatBubble;
   /** Shown above the head while their voice is coming through. */
   private voiceMark: Phaser.GameObjects.Text | null = null;
+  /** Outdoors, where trees and people sort by their feet. */
+  private sortByY: boolean;
 
-  constructor(scene: Phaser.Scene, player: PresencePlayer) {
+  constructor(scene: Phaser.Scene, player: PresencePlayer, options: { sortByY?: boolean } = {}) {
     this.id = player.id;
     this.name = player.name;
     this.targetX = player.x;
     this.targetY = player.y;
+    this.sortByY = options.sortByY ?? false;
 
     this.sprite = scene.add.sprite(player.x, player.y, SPRITE_KEY, 0);
     this.sprite.setDepth(5);
@@ -60,6 +63,7 @@ export class RemotePlayer {
 
     this.bubble = new ChatBubble(scene);
     this.applyAnimation(player.facing, false);
+    this.settle();
   }
 
   /** Show what this person just said, above their head. */
@@ -110,6 +114,16 @@ export class RemotePlayer {
     this.nameTag.setPosition(this.sprite.x, this.sprite.y + FRAME_HEIGHT / 2 + 2);
     this.voiceMark?.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 - 4);
     this.bubble.updatePosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6);
+    this.settle();
+  }
+
+  /** Whoever's feet are lower stands in front, the way the props do. */
+  private settle() {
+    if (!this.sortByY) return;
+    const feet = this.sprite.y + FRAME_HEIGHT / 2;
+    this.sprite.setDepth(feet);
+    this.nameTag.setDepth(feet + 1);
+    this.voiceMark?.setDepth(feet + 2);
   }
 
   /**

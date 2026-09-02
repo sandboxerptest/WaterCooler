@@ -52,7 +52,7 @@ export default function MessageBubble({
           </button>
         )}
       </div>
-      <div className="hud-chat__content">
+      <div className="hud-chat__content" data-message-id={msg.id}>
         {msg.content}
         {msg.streaming ? <span className="pixel-cursor">▌</span> : null}
       </div>

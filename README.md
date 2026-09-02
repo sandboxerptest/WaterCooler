@@ -240,6 +240,17 @@ room's activity like a pinball one. Keys, a pad or a touch screen all work;
 Escape (or B) backs out of a game to the menu, and out of the menu to the
 room.
 
+### Playing together
+
+One server is one world. Everyone who opens the site walks into the same
+places: up to six people on the world map, six in each lobby and on each
+floor, six on a campus or the island. Wherever you are, you see the others
+there as characters, their words appear over their heads and in the chat
+window, and with voice chat on you hear whoever is near you. Walking through
+a door or onto the ferry moves you to that place's room, and the people in
+both places see you go and arrive. The agents are shared too: a task one
+person assigns is seen by everyone in that room.
+
 ### The island across the water
 
 The bottom of the world map is the sea. The centre avenue carries on past

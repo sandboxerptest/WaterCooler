@@ -64,6 +64,16 @@ describe("roomFromLocation", () => {
     expect(roomFromLocation({ pathname: "/r/one", search: "?room=two" })).toBe("one");
   });
 
+  it("puts everyone on the world map in one room, and each campus in its own", () => {
+    expect(roomFromLocation({ pathname: "/world", search: "" })).toBe("world");
+    expect(roomFromLocation({ pathname: "/world/", search: "" })).toBe("world");
+    expect(roomFromLocation({ pathname: "/campus/homestar", search: "" })).toBe("campus-homestar");
+    expect(roomFromLocation({ pathname: "/campus/apeiron-media", search: "" })).toBe(
+      "campus-apeiron-media",
+    );
+    expect(roomFromLocation({ pathname: "/campus/../x", search: "" })).toBe("local");
+  });
+
   it("defaults on the bare app", () => {
     expect(roomFromLocation({ pathname: "/", search: "" })).toBe(DEFAULT_ROOM_SLUG);
   });

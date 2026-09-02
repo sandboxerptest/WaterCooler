@@ -33,6 +33,7 @@ import {
   type ServerMessage,
   type WorldChange,
   isVoiceSignal,
+  speechId,
 } from "../presence-types";
 
 import { ResidentSimulation } from "./residents";
@@ -255,7 +256,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * whoever is within earshot, which is the point of having an office rather
    * than a chat window.
    */
-  const relaySpeech = (slug: string, authorId: string, text: string, scope: SayScope) => {
+  const relaySpeech = (
+    slug: string,
+    authorId: string,
+    text: string,
+    scope: SayScope,
+    id: string | null,
+  ) => {
     const room = rooms.get(slug);
     if (!room) return;
 
@@ -265,7 +272,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
     const said = {
       type: "said" as const,
-      id: randomUUID(),
+      id: id ?? randomUUID(),
       from: { id: author.id, name: author.name },
       text,
       at: new Date().toISOString(),
@@ -362,6 +369,28 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
         if (parsed.type === "join") {
           const slug = normaliseRoomSlug(parsed.room);
+          // Walking from one place to another on the same connection: out
+          // of the old room first, so nobody there keeps a ghost of you.
+          const previous = roomOf.get(id);
+          if (previous === slug) {
+            const room = rooms.get(slug);
+            const player = room?.hub.snapshot().find((p) => p.id === id);
+            if (room && player) {
+              room.hub.place(id, {
+                x: coerceNumber(parsed.x, player.x),
+                y: coerceNumber(parsed.y, player.y),
+                facing: coerceFacing(parsed.facing),
+              });
+              send(ws, {
+                type: "welcome",
+                you: id,
+                players: room.hub.snapshot(),
+                capacity: room.hub.capacity,
+              });
+              return;
+            }
+          }
+          if (previous) drop(id);
           const room = roomFor(slug);
 
           const result = room.hub.join(id, {
@@ -447,7 +476,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (parsed.type === "say") {
           const text = typeof parsed.text === "string" ? parsed.text.trim().slice(0, 500) : "";
           if (!text) return;
-          relaySpeech(slug, id, text, parsed.scope === "nearby" ? "nearby" : "room");
+          relaySpeech(
+            slug,
+            id,
+            text,
+            parsed.scope === "nearby" ? "nearby" : "room",
+            speechId(parsed.id),
+          );
           return;
         }
 

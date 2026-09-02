@@ -45,8 +45,9 @@ export function usePresence() {
       gameEvents.emit("presence-count", humans, capacityRef.current);
     };
 
-    const unsubOpen = onRoomOpen(() => {
-      const spawn = latestRef.current;
+    /** Walk into the place the address bar names, standing where the scene put us. */
+    const join = (spawn: { x: number; y: number; facing: Facing } | null) => {
+      joinedRef.current = false;
       sendRoom({
         type: "join",
         room: currentRoom(),
@@ -56,6 +57,18 @@ export function usePresence() {
         y: spawn?.y ?? 0,
         facing: spawn?.facing ?? "down",
       });
+    };
+
+    const unsubOpen = onRoomOpen(() => join(latestRef.current));
+
+    // A scene started in-page — out of a door onto the world map, through a
+    // gate onto a campus — is a different place with the same socket. The
+    // server moves us from the old room to the new one, and everyone in
+    // both hears about it.
+    const unsubPlace = gameEvents.on("place-entered", (spawn) => {
+      const next = { x: spawn.x, y: spawn.y, facing: spawn.facing as Facing, moving: false };
+      latestRef.current = next;
+      join(next);
     });
 
     const unsubMessage = onRoomMessage((message) => {
@@ -106,6 +119,7 @@ export function usePresence() {
 
     return () => {
       unsubOpen();
+      unsubPlace();
       unsubMessage();
       unsubscribeMove();
       joinedRef.current = false;

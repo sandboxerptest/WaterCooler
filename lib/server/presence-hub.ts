@@ -91,6 +91,25 @@ export class PresenceHub {
     return { ok: true, player: strip(player) };
   }
 
+  /**
+   * Put a player where a scene says they stand. A join is the scene's word
+   * on where a person is — through a door, off a ferry — so unlike a move it
+   * is not held to walking speed from wherever they were before.
+   */
+  place(id: string, at: { x: number; y: number; facing: Facing }): PresencePlayer | null {
+    const player = this.players.get(id);
+    if (!player) return null;
+    if (!Number.isFinite(at.x) || !Number.isFinite(at.y)) return strip(player);
+    const now = this.now();
+    player.x = at.x;
+    player.y = at.y;
+    player.facing = at.facing;
+    player.moving = false;
+    player.lastSeen = now;
+    player.lastMoveAt = now;
+    return strip(player);
+  }
+
   leave(id: string): PresencePlayer | null {
     const player = this.players.get(id);
     if (!player) return null;

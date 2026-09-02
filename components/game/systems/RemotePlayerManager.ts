@@ -6,9 +6,11 @@ import type { PresencePlayer } from "@/lib/presence-types";
 export class RemotePlayerManager {
   private scene: Phaser.Scene;
   private players = new Map<string, RemotePlayer>();
+  private options: { sortByY?: boolean };
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, options: { sortByY?: boolean } = {}) {
     this.scene = scene;
+    this.options = options;
   }
 
   get count(): number {
@@ -25,7 +27,7 @@ export class RemotePlayerManager {
       if (existing) {
         existing.setTarget(incoming);
       } else {
-        this.players.set(incoming.id, new RemotePlayer(this.scene, incoming));
+        this.players.set(incoming.id, new RemotePlayer(this.scene, incoming, this.options));
       }
     }
 

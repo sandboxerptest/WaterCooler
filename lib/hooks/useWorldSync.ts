@@ -81,20 +81,22 @@ export function useWorldSync(refs: WorldSyncRefs) {
 
       if (message.type === "said") {
         // Humans get their own role so the panel and the bubbles can tell a
-        // person apart from an agent at a glance.
-        refs.dispatch.current({
-          type: "UPSERT_CHAT",
-          message: {
-            id: message.id,
-            runId: "",
-            role: "player",
-            content: message.text,
-            actorName: message.from.name,
-            timestamp: message.at,
-            sessionKey: refs.activeSessionKey.current ?? "main",
-            roomChat: true,
-          } as ChatMessage,
-        });
+        // person apart from an agent at a glance. The server has already
+        // kept the remark, so it is known here before it lands in the
+        // state — or the sync below would send it back out as a change of
+        // ours, and everyone would see it twice.
+        const said = {
+          id: message.id,
+          runId: "",
+          role: "player",
+          content: message.text,
+          actorName: message.from.name,
+          timestamp: message.at,
+          sessionKey: refs.activeSessionKey.current ?? "main",
+          roomChat: true,
+        } as ChatMessage;
+        markKnown(`message:${said.id}`, said);
+        refs.dispatch.current({ type: "UPSERT_CHAT", message: said });
         gameEvents.emit("player-said", message.from.id, message.text);
         return;
       }

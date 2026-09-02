@@ -5,8 +5,8 @@
  * and of node built-ins.
  */
 
-/** How many *humans* can be in a room at once. Agent seats are unrelated. */
-export const MAX_HUMAN_PLAYERS = 4;
+/** How many *humans* can be in one place at once. Agent seats are unrelated. */
+export const MAX_HUMAN_PLAYERS = 6;
 
 /** Presence broadcast rate. 20 Hz is smooth once the client interpolates. */
 export const TICK_MS = 50;
@@ -89,6 +89,13 @@ export interface SayMessage {
   type: "say";
   text: string;
   scope: SayScope;
+  /**
+   * The speaker's own id for the remark. They show it to themselves the
+   * moment they send it; the server keeps and relays it under the same id,
+   * so when the room's history comes back it is the same message, not a
+   * second copy.
+   */
+  id?: string;
 }
 
 /** A mark added to the room's whiteboard, or a request to wipe it. */
@@ -261,6 +268,11 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "pong" ||
     type === "voice"
   );
+}
+
+/** A remark's id as the speaker chose it, if it is one the store can take; else null. */
+export function speechId(raw: unknown): string | null {
+  return typeof raw === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(raw) ? raw : null;
 }
 
 /** The most a session description may weigh; a real one is a few kilobytes. */

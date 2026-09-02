@@ -11,11 +11,11 @@ import type { SayScope } from "./presence-types";
  * server to echo it back — you should see your own words the moment you send
  * them, and the server only relays to other people.
  */
-export function say(text: string, scope: SayScope = "room"): boolean {
+export function say(text: string, scope: SayScope = "room", id?: string): boolean {
   const trimmed = text.trim().slice(0, 500);
   if (!trimmed) return false;
 
-  const sent = sendRoom({ type: "say", text: trimmed, scope });
+  const sent = sendRoom({ type: "say", text: trimmed, scope, id });
   gameEvents.emit("self-said", trimmed);
   return sent;
 }

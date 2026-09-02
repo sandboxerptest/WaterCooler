@@ -31,7 +31,14 @@ import { useSession } from "./hooks/useSession";
 import { useTaskRouter } from "./hooks/useTaskRouter";
 import { usePresence } from "./hooks/usePresence";
 import { useWorldSync } from "./hooks/useWorldSync";
-import { primeFromSnapshot, syncMessages, syncSeats, syncSessions, syncTasks } from "./room-sync";
+import {
+  markKnown,
+  primeFromSnapshot,
+  syncMessages,
+  syncSeats,
+  syncSessions,
+  syncTasks,
+} from "./room-sync";
 import { isCliProvider, getDefaultGatewayUrl } from "./utils";
 
 // ── Context ────────────────────────────────────────────
@@ -357,21 +364,25 @@ export function StudioProvider({ children }: { children: ReactNode }) {
    */
   const sayInRoom = useCallback((text: string, scope: SayScope = "room") => {
     const trimmed = text.trim().slice(0, 500);
-    if (!trimmed || !say(trimmed, scope)) return;
+    // One id for the remark everywhere: here, on the server, and in the
+    // history that comes back after a refresh.
+    const id = `said-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    if (!trimmed || !say(trimmed, scope, id)) return;
 
-    dispatchRef.current({
-      type: "UPSERT_CHAT",
-      message: {
-        id: `said-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        runId: "",
-        role: "player",
-        content: trimmed,
-        actorName: loadPlayerName(),
-        timestamp: new Date().toISOString(),
-        sessionKey: MAIN_SESSION_KEY,
-        roomChat: true,
-      } as ChatMessage,
-    });
+    const message = {
+      id,
+      runId: "",
+      role: "player",
+      content: trimmed,
+      actorName: loadPlayerName(),
+      timestamp: new Date().toISOString(),
+      sessionKey: MAIN_SESSION_KEY,
+      roomChat: true,
+    } as ChatMessage;
+    // The room socket carries the remark and the server keeps it; it is not
+    // a change of ours for the sync to send a second time.
+    markKnown(`message:${id}`, message);
+    dispatchRef.current({ type: "UPSERT_CHAT", message });
   }, []);
 
   return React.createElement(

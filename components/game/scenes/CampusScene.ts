@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
+import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { Pathfinder } from "../utils/Pathfinder";
 import { ensureAnims, ensureSheet } from "../utils/sheets";
@@ -75,6 +76,8 @@ export class CampusScene extends Phaser.Scene {
   private residents = new Map<string, Phaser.GameObjects.GameObject[]>();
   private leaving = false;
   private arrival = new ArrivalWalk();
+  /** The other people on the yard. */
+  private presence: ScenePresence | null = null;
 
   constructor() {
     super({ key: "CampusScene" });
@@ -198,6 +201,20 @@ export class CampusScene extends Phaser.Scene {
       `${company?.name ?? campus.slug} · ${campus.place ?? "Campus"}`,
     );
 
+    // Everyone else on the yard, and the socket told we are on it now.
+    this.presence?.detach();
+    this.presence = attachPresence(this, { x: at.x, y: at.y, facing: direction }, (text) =>
+      this.player?.say(text),
+    );
+    // Stopped for another scene, or taken down with the game: either way
+    // the listeners go, or a dead scene keeps trying to draw people.
+    const letGo = () => {
+      this.presence?.detach();
+      this.presence = null;
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, letGo);
+    this.events.once(Phaser.Scenes.Events.DESTROY, letGo);
+
     // Anyone out on the yard. It has no room, so ask where everyone is.
     void this.showResidents();
     this.time.addEvent({ delay: 10_000, loop: true, callback: () => void this.showResidents() });
@@ -316,6 +333,7 @@ export class CampusScene extends Phaser.Scene {
     if (this.leaving) return;
     // Read the pad every frame, or it never reports anything out here.
     this.gamepad.poll();
+    this.presence?.update(delta);
     if (this.arrival.holdsInput) {
       if (this.arrival.walking) {
         this.player.drive(this.arrival.step(delta, MOVE_SPEED));
@@ -326,6 +344,7 @@ export class CampusScene extends Phaser.Scene {
         for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
       }
       this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
+      this.reportPosition();
       return;
     }
     const padVelocity = this.padVelocity();
@@ -338,7 +357,18 @@ export class CampusScene extends Phaser.Scene {
     }
     this.player.update(steering ?? padVelocity);
     this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
+    this.reportPosition();
     for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
+  }
+
+  /** Where we are, for the room socket to pass on to everyone else on the yard. */
+  private reportPosition() {
+    gameEvents.emit("player-moved", {
+      x: this.player.sprite.x,
+      y: this.player.sprite.y,
+      facing: this.player.direction,
+      moving: this.player.isMoving(),
+    });
   }
 
   /** Through a door to a lobby's page, or down the road back to the world map. */

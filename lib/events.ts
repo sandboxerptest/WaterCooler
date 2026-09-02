@@ -19,6 +19,12 @@ export interface GameEventMap {
   "hud-close-panel": [];
   /** Where this browser's own character is, for the room socket to send on. */
   "player-moved": [position: { x: number; y: number; facing: string; moving: boolean }];
+  /**
+   * A scene has put the character somewhere: a lobby, a floor, the world
+   * map, a campus. The address bar already says which; this carries where
+   * the character stands, so the room socket can join that place there.
+   */
+  "place-entered": [spawn: { x: number; y: number; facing: string }];
   /** Everyone else in the room, as the server last reported them. */
   "presence-updated": [players: PresencePlayer[]];
   /** A remote player disconnected and should be removed immediately. */

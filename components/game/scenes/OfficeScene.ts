@@ -242,6 +242,13 @@ export class OfficeScene extends Phaser.Scene {
       bossSpawn.y,
       bossSpawn.facing,
     );
+    // The socket joins this room here, where the character stands, rather
+    // than wherever the last scene left it.
+    gameEvents.emit("place-entered", {
+      x: this.player.sprite.x,
+      y: this.player.sprite.y,
+      facing: this.player.direction,
+    });
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
     // Upstairs, everyone with a desk gets one, with their name on it.
