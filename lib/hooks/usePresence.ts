@@ -6,6 +6,8 @@ import { acquireRoomSocket, onRoomMessage, onRoomOpen, sendRoom } from "../room-
 import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
+import { rememberedCharacter } from "../characters/choice";
+import { SPRITE_KEY } from "@/components/game/config/animations";
 import { rememberSelfId } from "../presence-self";
 import { rememberPlayers } from "../presence-roster";
 import { MOVE_SEND_MS, type Facing, type PresencePlayer } from "../presence-types";
@@ -38,7 +40,9 @@ export function usePresence() {
       const others = players.filter((player) => player.id !== selfIdRef.current);
       rememberPlayers(others);
       gameEvents.emit("presence-updated", others);
-      gameEvents.emit("presence-count", players.length, capacityRef.current);
+      // Residents are drawn like anyone else but are not people in the room.
+      const humans = players.filter((player) => !player.resident).length;
+      gameEvents.emit("presence-count", humans, capacityRef.current);
     };
 
     const unsubOpen = onRoomOpen(() => {
@@ -47,7 +51,7 @@ export function usePresence() {
         type: "join",
         room: currentRoom(),
         name: loadPlayerName(),
-        spriteKey: "player",
+        spriteKey: rememberedCharacter()?.key ?? SPRITE_KEY,
         x: spawn?.x ?? 0,
         y: spawn?.y ?? 0,
         facing: spawn?.facing ?? "down",

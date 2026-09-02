@@ -28,6 +28,8 @@ export interface JoinRequest {
   x: number;
   y: number;
   facing: Facing;
+  /** A server-driven resident: takes no human seat and never times out. */
+  resident?: boolean;
 }
 
 export type JoinResult =
@@ -55,8 +57,11 @@ export class PresenceHub {
     this.now = options.now ?? (() => Date.now());
   }
 
+  /** How many people — residents do not count against the room. */
   get count(): number {
-    return this.players.size;
+    let humans = 0;
+    for (const player of this.players.values()) if (!player.resident) humans++;
+    return humans;
   }
 
   get isFull(): boolean {
@@ -78,6 +83,7 @@ export class PresenceHub {
       y: request.y,
       facing: request.facing,
       moving: false,
+      resident: request.resident || undefined,
       lastSeen: at,
       lastMoveAt: at,
     };
@@ -145,6 +151,7 @@ export class PresenceHub {
     const at = this.now();
     const dropped: PresencePlayer[] = [];
     for (const [id, player] of this.players) {
+      if (player.resident) continue;
       if (at - player.lastSeen > IDLE_TIMEOUT_MS) {
         this.players.delete(id);
         dropped.push(strip(player));
@@ -167,5 +174,6 @@ function strip(player: TrackedPlayer): PresencePlayer {
     y: Math.round(player.y * 100) / 100,
     facing: player.facing,
     moving: player.moving,
+    ...(player.resident ? { resident: true } : {}),
   };
 }

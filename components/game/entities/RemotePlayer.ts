@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { SPRITE_KEY, FRAME_HEIGHT } from "../config/animations";
+import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
 import type { PresencePlayer } from "@/lib/presence-types";
 
@@ -29,6 +30,8 @@ export class RemotePlayer {
   private facing: PresencePlayer["facing"] = "down";
   private moving = false;
   private currentAnim = "";
+  /** "<sheet>:" when wearing something other than the default sheet. */
+  private prefix = "";
   private bubble: ChatBubble;
 
   constructor(scene: Phaser.Scene, player: PresencePlayer) {
@@ -39,6 +42,7 @@ export class RemotePlayer {
 
     this.sprite = scene.add.sprite(player.x, player.y, SPRITE_KEY, 0);
     this.sprite.setDepth(5);
+    this.wear(player.spriteKey);
 
     this.nameTag = scene.add
       .text(player.x, player.y + FRAME_HEIGHT / 2 + 2, player.name, {
@@ -71,6 +75,7 @@ export class RemotePlayer {
       this.name = player.name;
       this.nameTag.setText(player.name);
     }
+    this.wear(player.spriteKey);
 
     this.applyAnimation(player.facing, player.moving);
   }
@@ -90,9 +95,27 @@ export class RemotePlayer {
     this.bubble.updatePosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6);
   }
 
+  /**
+   * Look like the sheet they chose, when this scene has it loaded. Library
+   * sheets always are; a sheet this browser has never fetched falls back to
+   * the default look rather than a blank.
+   */
+  private wear(spriteKey: string) {
+    const scene = this.sprite.scene;
+    const key =
+      spriteKey !== SPRITE_KEY && scene.textures.exists(spriteKey) ? spriteKey : SPRITE_KEY;
+    const prefix = key === SPRITE_KEY ? "" : `${key}:`;
+    if (prefix === this.prefix && this.sprite.texture.key === key) return;
+    if (key !== SPRITE_KEY) ensureAnims(scene, key);
+    this.prefix = prefix;
+    this.currentAnim = "";
+    this.sprite.setTexture(key, 0);
+    this.applyAnimation(this.facing, this.moving);
+  }
+
   private applyAnimation(facing: PresencePlayer["facing"], moving: boolean) {
     this.facing = facing;
-    const key = `${moving ? "walk" : "idle"}-${facing}`;
+    const key = `${this.prefix}${moving ? "walk" : "idle"}-${facing}`;
     if (key === this.currentAnim) return;
     if (!this.sprite.scene.anims.exists(key)) return;
     this.currentAnim = key;

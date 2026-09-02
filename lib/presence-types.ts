@@ -39,6 +39,8 @@ export interface PresencePlayer {
   y: number;
   facing: Facing;
   moving: boolean;
+  /** An agent the server walks about, not a person; never counts as one. */
+  resident?: boolean;
 }
 
 // ── Client → server ────────────────────────────────────

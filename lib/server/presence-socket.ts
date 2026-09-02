@@ -19,7 +19,7 @@ import { normaliseRoomSlug } from "../rooms";
 import { achievementFor, type EarnedAchievement } from "../achievements";
 import type { ActivityEntry } from "../activity";
 import { isPongPayload } from "../pong/protocol";
-import { isStroke, sanitiseStroke } from "../whiteboard";
+import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
 import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
 import { createLogger } from "../logger";
 import {
@@ -33,6 +33,8 @@ import {
   type ServerMessage,
   type WorldChange,
 } from "../presence-types";
+
+import { ResidentSimulation } from "./residents";
 
 const log = createLogger("Presence");
 
@@ -152,6 +154,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       if (id === exceptId) continue;
       send(socket, message);
     }
+  };
+
+  /** Everyone in every room; the whiteboard is one board. */
+  const broadcastAll = (message: ServerMessage, exceptId?: string) => {
+    for (const slug of rooms.keys()) broadcast(slug, message, exceptId);
   };
 
   /** Tell the room about badges just earned, so it is a shared moment. */
@@ -413,10 +420,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           const player = room.hub.snapshot().find((p) => p.id === id);
 
           if (parsed.action === "clear") {
-            getRoomStore().clearBoard(slug);
-            log.info(`${player?.name ?? "someone"} cleared the board in "${slug}"`);
-            // Everyone including the author, so a wipe is unambiguous
-            broadcast(slug, { type: "board", action: "clear", by: player?.name });
+            getRoomStore().clearBoard(SHARED_BOARD);
+            log.info(`${player?.name ?? "someone"} cleared the board from "${slug}"`);
+            // Everyone everywhere, including the author, so a wipe is unambiguous
+            broadcastAll({ type: "board", action: "clear", by: player?.name });
             recordActivity(slug, {
               kind: "board",
               actor: player?.name ?? "someone",
@@ -427,10 +434,9 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
           if (!isStroke(parsed.stroke)) return;
           const stroke = sanitiseStroke({ ...parsed.stroke, author: player?.name });
-          getRoomStore().addStroke(slug, stroke.id, stroke);
+          getRoomStore().addStroke(SHARED_BOARD, stroke.id, stroke);
           // The author already drew it locally; echoing would double the ink
-          broadcast(
-            slug,
+          broadcastAll(
             { type: "board", action: "draw", stroke, done: parsed.done === true, by: player?.name },
             id,
           );
@@ -498,9 +504,15 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
   wss.on("error", (err) => log.error("WebSocketServer error:", err.message));
 
+  // The residents walk about the same rooms, and leave when the server does.
+  // RESIDENT_DWELL_SCALE=0.02 makes a day of theirs pass in a minute, for watching.
+  const dwellScale = Number(process.env.RESIDENT_DWELL_SCALE) || 1;
+  const stopResidents = new ResidentSimulation({ roomFor }, { dwellScale }).start();
+
   server.on("close", () => {
     clearInterval(ticker);
     clearInterval(heartbeat);
+    stopResidents();
   });
 
   log.info(`room socket attached on ${path}`);
