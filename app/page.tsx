@@ -34,13 +34,16 @@ export default function Page() {
     () => SIDEBAR_DEFAULT_WIDTH,
   );
   const [width, setWidth] = useState<number | null>(null);
-  /** Null until the reader says otherwise; the screen decides to begin with. */
-  const [sidebarChoice, setSidebarChoice] = useState<boolean | null>(null);
+  /**
+   * Closed until the person opens it. It used to open itself on a wide
+   * screen, which meant the office arrived already half covered by a
+   * conversation nobody had asked for yet.
+   */
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
-  const sidebarOpen = sidebarChoice ?? wideEnough;
 
-  const toggleSidebar = useCallback(() => setSidebarChoice(!sidebarOpen), [sidebarOpen]);
-  const closeSidebar = useCallback(() => setSidebarChoice(false), []);
+  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   // Only while it is a drawer over the office. Where it is a column beside
   // the office it covers nothing, and back should still mean back.

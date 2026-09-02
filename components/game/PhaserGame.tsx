@@ -42,7 +42,15 @@ export default function PhaserGame() {
         if (width === lastWidth && height === lastHeight) return;
         lastWidth = width;
         lastHeight = height;
-        game.scale.resize(width, height);
+        // In RESIZE mode the scale manager derives the game size from what it
+        // believes the parent to be, and it only re-reads that on a window
+        // resize or its own twice-a-second poll. Collapsing the chat column is
+        // neither: the element simply unmounts, the stage reflows, and no
+        // window event fires — so telling it the parent size directly, and
+        // refreshing, is what actually moves the canvas.
+        game.scale.setParentSize(width, height);
+        game.scale.refresh();
+        log.debug(`canvas -> ${width}x${height}`);
       });
       observer.observe(containerRef.current);
     }

@@ -7,6 +7,7 @@ import {
   ZOOM_MAX,
   CAMERA_DRAG_THRESHOLD,
 } from "@/lib/constants";
+import { fillZoom, zoomToCover } from "@/lib/camera";
 
 export class CameraController {
   private scene: Phaser.Scene;
@@ -34,12 +35,41 @@ export class CameraController {
     cam.setBackgroundColor("#1a1814");
     cam.setRoundPixels(true);
     cam.setZoom(ZOOM_DEFAULT);
+    this.applyFillZoom(cam);
     this.updateCameraBounds();
     cam.startFollow(this.playerSprite, true, CAMERA_LERP, CAMERA_LERP);
 
-    this.scene.scale.on("resize", () => this.updateCameraBounds());
+    this.scene.scale.on("resize", () => {
+      // Zoom first, then bounds: bounds are derived from the zoomed viewport,
+      // so recalculating them against the old zoom leaves the room adrift.
+      this.applyFillZoom(this.scene.cameras.main);
+      this.updateCameraBounds();
+    });
     this.initWheel(cam);
     this.initCameraDrag(cam);
+  }
+
+  /**
+   * The smallest zoom that still covers the viewport, capped at ZOOM_MAX.
+   *
+   * Also the floor for the scroll wheel: zooming out past this is what put
+   * empty background beside the room in the first place.
+   */
+  private coverZoom(cam: Phaser.Cameras.Scene2D.Camera): number {
+    return Math.min(fillZoom(cam.width, cam.height, this.mapWidth, this.mapHeight), ZOOM_MAX);
+  }
+
+  /** Grow the view when the room no longer fills it; never shrink it. */
+  private applyFillZoom(cam: Phaser.Cameras.Scene2D.Camera) {
+    const next = zoomToCover(
+      cam.zoom,
+      cam.width,
+      cam.height,
+      this.mapWidth,
+      this.mapHeight,
+      ZOOM_MAX,
+    );
+    if (next !== cam.zoom) cam.setZoom(next);
   }
 
   private initWheel(cam: Phaser.Cameras.Scene2D.Camera) {
@@ -48,7 +78,8 @@ export class CameraController {
       e.preventDefault();
       const delta = e.ctrlKey ? e.deltaY * 3 : e.deltaY;
       const oldZoom = cam.zoom;
-      const newZoom = Phaser.Math.Clamp(oldZoom - delta * ZOOM_SENSITIVITY, ZOOM_MIN, ZOOM_MAX);
+      const floor = Math.max(ZOOM_MIN, this.coverZoom(cam));
+      const newZoom = Phaser.Math.Clamp(oldZoom - delta * ZOOM_SENSITIVITY, floor, ZOOM_MAX);
       if (newZoom === oldZoom) return;
 
       if (!this.cameraFollowing) {
