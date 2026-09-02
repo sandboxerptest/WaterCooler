@@ -18,8 +18,9 @@ import { Shirt } from "lucide-react";
 import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
 import Welcome from "./Welcome";
-import { profileSnapshot } from "@/lib/profile";
+import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
+import { pushProfileToAccount } from "@/lib/account-client";
 import ElevatorModal from "./ElevatorModal";
 import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
@@ -43,8 +44,14 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
   );
 
   // Keep the building's register current: name or home may have changed.
+  // And a change made here — a new character, say — follows someone
+  // signed in to their account.
   useEffect(() => {
     void registerProfile(profileSnapshot());
+    return subscribeToProfile(() => {
+      void registerProfile(profileSnapshot());
+      void pushProfileToAccount(profileSnapshot());
+    });
   }, []);
 
   // Auto-dismiss onboarding when connection panel opens

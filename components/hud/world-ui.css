@@ -173,3 +173,78 @@
   font-size: 8px;
   color: var(--pixel-muted);
 }
+
+/* ── Signing in ─────────────────────────────────────── */
+
+.welcome__providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.welcome-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.welcome__account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pixel-muted);
+  font-size: 10px;
+}
+
+.welcome__account img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.welcome__error {
+  color: var(--pixel-red);
+  font-size: 10px;
+}
+
+.topbar-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topbar-account__image {
+  border-radius: 50%;
+  display: block;
+}
+
+.topbar-account__initial {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--pixel-accent);
+  color: var(--pixel-bg);
+  font-size: 10px;
+}
+
+.welcome__hint--block {
+  display: block;
+  margin-top: 10px;
+}
+
+.welcome__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--pixel-accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.welcome__link:hover {
+  color: var(--pixel-accent-hover);
+}

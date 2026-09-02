@@ -218,6 +218,42 @@ clock skew, nonce replay, then the HMAC-SHA256 signature over
 consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
 is not mounted at all when there is no secret to verify against.
 
+### Signing in with Google or Microsoft
+
+By default a person is a browser profile: a name, a home building and a
+character kept in localStorage, with the room link as the only credential.
+Set up sign-in and people are accounts instead, known by email, and their
+profile and counts follow them to any device.
+
+Sign-in is Auth.js. Create an OAuth app in the
+[Google Cloud console](https://console.cloud.google.com/apis/credentials) and
+one in [Microsoft Entra](https://entra.microsoft.com/) (App registrations),
+with this redirect URI for each, adjusted to your host and port:
+
+```
+http://localhost:3001/api/auth/callback/google
+http://localhost:3001/api/auth/callback/microsoft-entra-id
+```
+
+Then put the keys in `.env.local` (gitignored; never commit them):
+
+| Variable                         | Purpose                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| `AUTH_SECRET`                    | Signs the session cookie; `npx auth secret` writes one for you                       |
+| `AUTH_GOOGLE_ID`                 | Google OAuth client id                                                               |
+| `AUTH_GOOGLE_SECRET`             | Google OAuth client secret                                                           |
+| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Entra application (client) id                                                        |
+| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Entra client secret                                                                  |
+| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Optional: `https://login.microsoftonline.com/<tenant>/v2.0` to allow one tenant only |
+
+A provider is offered on the welcome screen when both of its keys are
+present; with none present, sign-in is off and profiles stay in the browser.
+Accounts live in the `accounts` table of the room database: the provider's
+display name and picture, the profile chosen here, a visit count, and a
+`stats` map any feature can count into with `bumpAccountStat`. A signed-in
+person's desk and presence go under an id derived from their email, so they
+keep the same desk from every device.
+
 ### Running agents with an API key (cloud mode)
 
 `AGENT_PROVIDER=claude-api` runs the same CLI against an Anthropic API key

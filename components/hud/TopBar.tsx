@@ -9,6 +9,7 @@ import Image from "next/image";
 import type { SeatState } from "@/types/game";
 import type { HudPanelId, HudDockItem } from "./HudDock";
 import CharacterPortrait from "./CharacterPortrait";
+import AccountButton from "./AccountButton";
 
 interface TopBarProps {
   seats: SeatState[];
@@ -109,6 +110,7 @@ export default function TopBar({
             </button>
           );
         })}
+        <AccountButton />
       </div>
     </div>
   );

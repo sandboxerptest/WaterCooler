@@ -17,6 +17,8 @@ import { mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { createLogger } from "../logger";
 import { ACTIVITY_LIMIT, type ActivityEntry } from "../activity";
+import { normaliseEmail, type Account, type AccountProfile, type SignedIn } from "../accounts";
+import { personIdForEmail } from "./person-id";
 
 const log = createLogger("RoomStore");
 
@@ -172,10 +174,37 @@ CREATE TABLE IF NOT EXISTS people (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS people_home ON people (home, updated_at);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  email          TEXT PRIMARY KEY,
+  display_name   TEXT,
+  image          TEXT,
+  name           TEXT,
+  home           TEXT,
+  character_key  TEXT,
+  character_path TEXT,
+  visits         INTEGER NOT NULL DEFAULT 0,
+  stats          TEXT NOT NULL DEFAULT '{}',
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  last_seen_at   TEXT NOT NULL
+);
 `;
 
 interface DataRow {
   data: string;
+}
+
+interface AccountRow {
+  email: string;
+  display_name: string | null;
+  image: string | null;
+  name: string | null;
+  home: string | null;
+  character_key: string | null;
+  character_path: string | null;
+  visits: number;
+  stats: string;
 }
 
 function parseRows(rows: DataRow[]): unknown[] {
@@ -243,6 +272,104 @@ export class RoomStore {
     return this.db
       .prepare("SELECT id, name FROM people WHERE home = ? ORDER BY rowid ASC")
       .all(home) as unknown as { id: string; name: string }[];
+  }
+
+  // ── Accounts ──────────────────────────────────────────
+
+  /**
+   * Someone signed in has arrived. Counts the visit, remembers what the
+   * provider says they are called and look like, and hands back the account
+   * as the browser wants it — with the profile they chose here, if they have.
+   */
+  visitAccount(person: SignedIn): Account {
+    const email = normaliseEmail(person.email);
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO accounts (email, display_name, image, visits, created_at, updated_at, last_seen_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET
+           display_name = excluded.display_name,
+           image = excluded.image,
+           visits = visits + 1,
+           last_seen_at = excluded.last_seen_at`,
+      )
+      .run(email, person.name, person.image, now, now, now);
+    return this.getAccount(email)!;
+  }
+
+  /** Keep the profile someone chose; their desk follows their home. */
+  saveAccountProfile(person: SignedIn, profile: AccountProfile): Account {
+    const email = normaliseEmail(person.email);
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO accounts (email, display_name, image, name, home, character_key, character_path, created_at, updated_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET
+           name = excluded.name,
+           home = excluded.home,
+           character_key = excluded.character_key,
+           character_path = excluded.character_path,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        email,
+        person.name,
+        person.image,
+        profile.name,
+        profile.home,
+        profile.character.key,
+        profile.character.path,
+        now,
+        now,
+        now,
+      );
+    this.upsertPerson({ id: personIdForEmail(email), name: profile.name, home: profile.home });
+    return this.getAccount(email)!;
+  }
+
+  /** Count something about a person: a game played, a score, a task handed out. */
+  bumpAccountStat(email: string, stat: string, by = 1): Account | null {
+    const account = this.getAccount(normaliseEmail(email));
+    if (!account) return null;
+    const stats = { ...account.stats, [stat]: (account.stats[stat] ?? 0) + by };
+    this.db
+      .prepare("UPDATE accounts SET stats = ?, updated_at = ? WHERE email = ?")
+      .run(JSON.stringify(stats), new Date().toISOString(), account.email);
+    return { ...account, stats };
+  }
+
+  getAccount(email: string): Account | null {
+    const row = this.db
+      .prepare(
+        `SELECT email, display_name, image, name, home, character_key, character_path, visits, stats
+         FROM accounts WHERE email = ?`,
+      )
+      .get(normaliseEmail(email)) as AccountRow | undefined;
+    if (!row) return null;
+    const complete = row.name && row.home && row.character_key && row.character_path;
+    let stats: Record<string, number> = {};
+    try {
+      stats = JSON.parse(row.stats) as Record<string, number>;
+    } catch {
+      // A damaged blob counts for nothing; the next bump starts it afresh.
+    }
+    return {
+      email: row.email,
+      displayName: row.display_name,
+      image: row.image,
+      personId: personIdForEmail(row.email),
+      profile: complete
+        ? {
+            name: row.name!,
+            home: row.home!,
+            character: { key: row.character_key!, path: row.character_path! },
+          }
+        : null,
+      visits: row.visits,
+      stats,
+    };
   }
 
   // ── Whiteboard ────────────────────────────────────────

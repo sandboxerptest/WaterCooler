@@ -6,6 +6,7 @@ const full = {
   name: "Robert",
   home: "castle-atlantic",
   character: { key: "library-character_02", path: "/characters/x.png" },
+  guest: false,
 };
 
 describe("a profile is complete when", () => {

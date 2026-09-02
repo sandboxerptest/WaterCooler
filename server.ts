@@ -40,7 +40,10 @@ const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER) ? getCliProvider(AGENT_PROV
 // Expose provider to Next.js client code (compiled on-demand in dev)
 process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
 
-const app = next({ dev });
+// Next builds each request's absolute URL from what it is told here, not
+// from the socket: without the port, sign-in callbacks would point at 3000
+// whatever port the server is actually on.
+const app = next({ dev, port, hostname: process.env.HOSTNAME ?? "localhost" });
 const handle = app.getRequestHandler();
 
 // ── Internal dispatch endpoint for MCP tool → auggie bridge ──
