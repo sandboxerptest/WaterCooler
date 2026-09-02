@@ -18,7 +18,7 @@
 
 import type { Game } from "../map/office";
 
-export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus";
+export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus" | "lab";
 
 export interface Organisation {
   slug: string;
@@ -35,6 +35,9 @@ export const ORGANISATIONS: readonly Organisation[] = [
   { slug: "chester", name: "Chester", tagline: "Building supply", style: "supply" },
   { slug: "blockhouse", name: "Blockhouse", tagline: "Building supply", style: "blocks" },
   { slug: "homestar", name: "Homestar", tagline: "Business campus", style: "campus", campus: true },
+  // Out of the way, past the trees at the far end of the south road: the
+  // science lab that makes the whole world possible.
+  { slug: "mettara", name: "Mettara", tagline: "Science lab", style: "lab" },
 ];
 
 export function organisationFor(slug: string | null | undefined): Organisation | null {
@@ -77,6 +80,7 @@ export const TENANTS: readonly Tenant[] = [
   lobby("homestar-operations", "homestar", { location: "Operations", kind: "office" }),
   lobby("homestar-store", "homestar", { location: "Building Supply", kind: "store" }),
   lobby("homestar-field-crew", "homestar", { location: "Field Crew", kind: "garage" }),
+  lobby("mettara", "mettara"),
 ];
 
 export function tenantFor(slug: string | null | undefined): Tenant | null {
@@ -217,6 +221,8 @@ export const BUILDINGS: readonly Building[] = [
     intoLobby("chester-store"),
     "world-supply",
   ),
+  // South-west, off the south road behind the trees: the lab.
+  placeBuilding("mettara", TILE * 1, TILE * 21, 6 * TILE, TILE, intoLobby("mettara"), "world-lab"),
   // East: the Homestar campus gate.
   placeBuilding(
     "homestar",
@@ -229,8 +235,8 @@ export const BUILDINGS: readonly Building[] = [
   ),
 ];
 
-/** Where a person appears on the world map with no building to step out of. */
-export const WORLD_SPAWN = { x: CENTRE_X + (30 * TILE) / 2, y: 17 * TILE };
+/** Where a person appears on the world map with no building to step out of: by the fountain. */
+export const WORLD_SPAWN = { x: CENTRE_X + 600, y: 655 };
 
 /** The building a slug — a tenant's or an organisation's — comes out of. */
 export function buildingFrom(slug: string | null | undefined): Building | null {

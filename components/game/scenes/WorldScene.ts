@@ -14,6 +14,7 @@ import { rememberedCharacter } from "@/lib/characters/choice";
 import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
 import { gameEvents } from "@/lib/events";
+import { WORLD_PATH, showAddress } from "@/lib/world/paths";
 import {
   BUILDINGS,
   TILE,
@@ -49,6 +50,7 @@ const SIGN_Y: Record<string, number> = {
   "world-supply": 92,
   "world-blocks": 169,
   "world-campus": 173,
+  "world-lab": 159,
 };
 /** A door zone target that starts a scene rather than loading a page. */
 const CAMPUS_TARGET = "campus:";
@@ -101,6 +103,7 @@ export class WorldScene extends Phaser.Scene {
     this.load.image("world-supply", "/sprites/world/building_supply.png");
     this.load.image("world-blocks", "/sprites/world/building_blocks.png");
     this.load.image("world-campus", "/sprites/world/building_campus.png");
+    this.load.image("world-lab", "/sprites/world/building_lab.png");
     this.load.image(PROPS_KEY, "/sprites/world/props.png");
     this.load.json("world-props-frames", "/sprites/world/props.json");
     // Normally already loaded by the office; guarded for a direct arrival.
@@ -110,6 +113,10 @@ export class WorldScene extends Phaser.Scene {
   create(data: WorldSceneData) {
     this.leaving = false;
     this.latch.reset();
+    // A walk that was still under way when a door fired must not resume here.
+    this.navigator.cancel();
+    // Reached in-page from a lobby: say so in the bar, so a reload comes back here.
+    showAddress(WORLD_PATH);
     if (!this.anims.exists("idle-down")) buildSpriteFrames(this, SPRITE_KEY);
     this.cutFrames();
 
@@ -267,16 +274,18 @@ export class WorldScene extends Phaser.Scene {
     this.add.image(b.frame.x, b.frame.y, b.art).setOrigin(0, 0).setDepth(foot);
     this.solid(walls, b.solid);
 
-    // The name, on the sign the picture leaves blank — large, on its own
-    // strip of the sign's colour, so it reads from across the green.
+    // The name, on the sign the picture leaves blank: the same size as a
+    // campus building's, so the two maps read alike. The text carries its
+    // own strip of the band's colour, so a long name stays readable past
+    // the band's ends.
     this.add
       .text(b.frame.x + b.frame.width / 2, b.frame.y + SIGN_Y[b.art], b.org.name.toUpperCase(), {
         fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "14px",
+        fontSize: "16px",
         color: "#1b1b2a",
         align: "center",
         backgroundColor: "#e0b870",
-        padding: { x: 6, y: 2 },
+        padding: { x: 6, y: 3 },
       })
       .setOrigin(0.5, 0.5)
       .setDepth(foot + 1)

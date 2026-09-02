@@ -47,7 +47,8 @@ export interface Campus {
   entrance: { x: number; y: number };
 }
 
-export const SMALL = 3 * TILE;
+/** How many tiles square a building is: drawn at 2x on a yard that fills the screen. */
+export const BUILDING_TILES = 6;
 
 interface Placement {
   tenant: string;
@@ -57,29 +58,35 @@ interface Placement {
   art?: string;
 }
 
-function small({ tenant: tenantSlug, tx, ty, side = "bottom", art }: Placement): CampusBuilding {
+function building(
+  { tenant: tenantSlug, tx, ty, side = "bottom", art }: Placement,
+  size = BUILDING_TILES,
+): CampusBuilding {
   const tenant = tenantFor(tenantSlug);
   if (!tenant?.kind) throw new Error(`${tenantSlug} is not a campus building`);
-  const frame = { x: tx * TILE, y: ty * TILE, width: SMALL, height: SMALL };
+  const px = size * TILE;
+  const frame = { x: tx * TILE, y: ty * TILE, width: px, height: px };
   const base = { tenant, kind: tenant.kind, art: art ?? `site-${tenant.kind}`, frame, side };
+  const doorCol = Math.floor(size / 2);
   if (side === "bottom") {
     return {
       ...base,
-      solid: { x: frame.x, y: frame.y, width: SMALL, height: SMALL - TILE / 2 },
-      door: { x: frame.x + TILE, y: frame.y + SMALL - TILE / 2, width: TILE, height: TILE },
-      outside: { x: frame.x + SMALL / 2, y: frame.y + SMALL + TILE * 1.25 },
+      solid: { x: frame.x, y: frame.y, width: px, height: px - TILE / 2 },
+      door: { x: frame.x + doorCol * TILE, y: frame.y + px - TILE / 2, width: TILE, height: TILE },
+      outside: { x: frame.x + doorCol * TILE + TILE / 2, y: frame.y + px + TILE * 1.25 },
       exitDirection: "down",
     };
   }
   // A side door: the whole picture is solid, and the way in is the tile
   // beside its middle row, on the road side.
-  const doorX = side === "right" ? frame.x + SMALL : frame.x - TILE;
+  const doorX = side === "right" ? frame.x + px : frame.x - TILE;
+  const doorY = frame.y + doorCol * TILE;
   const away = side === "right" ? 1 : -1;
   return {
     ...base,
     solid: frame,
-    door: { x: doorX, y: frame.y + TILE, width: TILE, height: TILE },
-    outside: { x: doorX + TILE / 2 + away * TILE * 1.25, y: frame.y + TILE + TILE / 2 - 43 },
+    door: { x: doorX, y: doorY, width: TILE, height: TILE },
+    outside: { x: doorX + TILE / 2 + away * TILE * 1.25, y: doorY + TILE / 2 - 43 },
     exitDirection: side,
   };
 }
@@ -98,7 +105,7 @@ function layout(
   props: PlacedProp[],
   yardTop = 7,
 ): Campus {
-  const buildings = placements.map(small);
+  const buildings = placements.map((p) => building(p));
   const roadX = Math.floor(columns / 2) - 2;
   const paved: Rect[] = [
     { x: 1, y: yardTop, width: columns - 2, height: 3 },
@@ -107,14 +114,17 @@ function layout(
   for (const b of buildings) {
     const tx = b.frame.x / TILE;
     const ty = b.frame.y / TILE;
+    const size = b.frame.width / TILE;
     if (b.side === "bottom") {
-      paved.push({ x: tx + 1, y: ty + 3, width: 1, height: Math.max(0, yardTop - ty - 3) });
+      const doorTx = b.door.x / TILE;
+      paved.push({ x: doorTx, y: ty + size, width: 1, height: Math.max(0, yardTop - ty - size) });
     } else {
       // The mat: from the road to the door, one tile high at the door's row.
       const doorTx = b.door.x / TILE;
+      const doorTy = b.door.y / TILE;
       const from = Math.min(doorTx, b.side === "right" ? roadX : roadX + 3);
       const to = Math.max(doorTx, b.side === "right" ? roadX : roadX + 3);
-      paved.push({ x: from, y: ty + 1, width: to - from + 1, height: 1 });
+      paved.push({ x: from, y: doorTy, width: to - from + 1, height: 1 });
     }
   }
   return {
@@ -137,23 +147,21 @@ export const CAMPUSES: Record<string, Campus> = {
   // The departments across the top, each its own kind of building; the
   // store and the garage along the bottom, entered from the road side.
   // Sized like the lobby, so it all fits on one screen at a readable size.
-  // Few tiles, so the camera's fit draws everything large and legible.
+  // The lobby's own frame — 20 by 19 — filled with buildings drawn at
+  // twice the size, so the yard takes the screen a lobby does.
   homestar: layout(
     "homestar",
-    16,
-    12,
+    20,
+    19,
     [
-      { tenant: "homestar-sales", tx: 1, ty: 1, art: "site-office-sales" },
-      { tenant: "homestar-finance", tx: 6, ty: 1, art: "site-office-finance" },
-      { tenant: "homestar-operations", tx: 11, ty: 1, art: "site-office-operations" },
-      { tenant: "homestar-store", tx: 1, ty: 7, side: "right" },
-      { tenant: "homestar-field-crew", tx: 12, ty: 7, side: "left" },
+      { tenant: "homestar-sales", tx: 1, ty: 1, art: "site-office-sales-2x" },
+      { tenant: "homestar-finance", tx: 7, ty: 1, art: "site-office-finance-2x" },
+      { tenant: "homestar-operations", tx: 13, ty: 1, art: "site-office-operations-2x" },
+      { tenant: "homestar-store", tx: 1, ty: 11, side: "right", art: "site-store-2x" },
+      { tenant: "homestar-field-crew", tx: 13, ty: 11, side: "left", art: "site-garage-2x" },
     ],
-    [
-      { kind: "planter", x: 250, y: 235 },
-      { kind: "planter", x: 510, y: 235 },
-    ],
-    5,
+    [],
+    7,
   ),
 };
 

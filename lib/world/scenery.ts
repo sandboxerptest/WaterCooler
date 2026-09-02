@@ -28,16 +28,17 @@ export type Ground = "grass" | "paving" | "kerb" | "asphalt";
 
 const CENTRE = CENTRE_X / TILE;
 
-/** A path from a building's door straight down to the promenade, in tiles. */
-function pathDown(b: (typeof BUILDINGS)[number]): Rect {
-  const x = Math.floor((b.door.x + b.door.width / 2) / TILE) - 1;
-  const y = (b.frame.y + b.frame.height) / TILE;
-  return { x, y, width: 2, height: 16 - y };
-}
-
 /** Where the promenades run, in tile rows. */
 export const NORTH_ROAD = 16;
 export const SOUTH_ROAD = 30;
+
+/** A path from a building's door straight down to the road below it, in tiles. */
+function pathDown(b: (typeof BUILDINGS)[number]): Rect {
+  const x = Math.floor((b.door.x + b.door.width / 2) / TILE) - 1;
+  const y = (b.frame.y + b.frame.height) / TILE;
+  const road = y <= NORTH_ROAD ? NORTH_ROAD : SOUTH_ROAD;
+  return { x, y, width: 2, height: road - y };
+}
 
 /** Paved ground, in tiles. Order does not matter; anything paved is walkable. */
 export const PAVED: readonly Rect[] = [
@@ -168,7 +169,7 @@ export const SCENERY: readonly PlacedProp[] = [
   // West: the two stores, each with lamps and flowers at the door.
   { kind: "tree", x: 700, y: 250 },
   { kind: "tree", x: 1330, y: 300 },
-  { kind: "tree", x: 1400, y: 600 },
+  { kind: "tree", x: 1000, y: 640 },
   { kind: "bush", x: 214, y: 404 },
   { kind: "bush", x: 458, y: 404 },
   { kind: "lamp", x: 268, y: 450 },
@@ -177,7 +178,7 @@ export const SCENERY: readonly PlacedProp[] = [
   { kind: "bush", x: 794, y: 692 },
   { kind: "lamp", x: 600, y: 740 },
   { kind: "lamp", x: 744, y: 740 },
-  { kind: "planter", x: 300, y: 560 },
+  { kind: "planter", x: 520, y: 300 },
 
   // Centre: the plaza between the two head offices.
   ...centre([
@@ -188,20 +189,20 @@ export const SCENERY: readonly PlacedProp[] = [
     { kind: "tree", x: 830, y: 300 },
     { kind: "bush", x: 720, y: 400 },
     { kind: "bush", x: 262, y: 500 },
-    { kind: "bush", x: 506, y: 500 },
-    { kind: "bush", x: 934, y: 500 },
+    { kind: "bush", x: 490, y: 500 },
+    { kind: "bush", x: 950, y: 500 },
     { kind: "bush", x: 1178, y: 500 },
     { kind: "lamp", x: 316, y: 540 },
     { kind: "lamp", x: 452, y: 540 },
     { kind: "lamp", x: 988, y: 540 },
     { kind: "lamp", x: 1124, y: 540 },
-    { kind: "planter", x: 620, y: 478 },
-    { kind: "planter", x: 820, y: 478 },
+    { kind: "planter", x: 620, y: 424 },
+    { kind: "planter", x: 820, y: 424 },
     { kind: "fountain", x: 720, y: 620 },
     { kind: "bench", x: 720, y: 720 },
-    { kind: "lamp", x: 540, y: 560 },
-    { kind: "lamp", x: 900, y: 560 },
-    { kind: "signpost", x: 780, y: 900 },
+    { kind: "lamp", x: 504, y: 560 },
+    { kind: "lamp", x: 936, y: 560 },
+    { kind: "signpost", x: 800, y: 930 },
   ]),
 
   // South of the north road: a park with a pond in the middle stretch,
@@ -218,12 +219,17 @@ export const SCENERY: readonly PlacedProp[] = [
   { kind: "planter", x: CENTRE_X + 1100, y: 1000 },
   { kind: "tree", x: CENTRE_X + 1000, y: 1200 },
   { kind: "tree", x: CENTRE_X + 1240, y: 1300 },
-  { kind: "signpost", x: CENTRE_X + 760, y: 1000 },
-  ...treeLine(1000, [140, 300, 560]),
-  ...treeLine(1300, [200, 460]),
-  { kind: "bench", x: 330, y: 1150 },
+  { kind: "signpost", x: CENTRE_X + 800, y: 1040 },
+  // The lab stands back among trees.
+  ...treeLine(990, [80, 210, 330]),
+  { kind: "tree", x: 520, y: 1120 },
+  { kind: "tree", x: 530, y: 1260 },
+  { kind: "bush", x: 60, y: 1330 },
+  { kind: "lamp", x: 120, y: 1370 },
+  { kind: "lamp", x: 264, y: 1370 },
+
   { kind: "lamp", x: 360, y: 1250 },
-  { kind: "lamp", x: 480, y: 1250 },
+  { kind: "lamp", x: 504, y: 1250 },
   { kind: "lamp", x: CENTRE_X + 650, y: 1000 },
   { kind: "lamp", x: CENTRE_X + 790, y: 1000 },
   { kind: "van", x: EAST_X + 480, y: 1280 },

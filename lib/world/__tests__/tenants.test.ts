@@ -19,13 +19,14 @@ const overlaps = (a: { x: number; y: number; width: number; height: number }, b:
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 describe("organisations and their lobbies", () => {
-  it("names the five businesses", () => {
+  it("names the businesses, and the lab", () => {
     expect(ORGANISATIONS.map((o) => o.name)).toEqual([
       "Castle Atlantic",
       "Sandbox ERP",
       "Chester",
       "Blockhouse",
       "Homestar",
+      "Mettara",
     ]);
   });
 

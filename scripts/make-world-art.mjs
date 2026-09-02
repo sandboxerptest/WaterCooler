@@ -709,6 +709,70 @@ function van() {
   return c;
 }
 
+/** The lab: white walls, a teal dome with a lit lens, an aerial, and a big round window. */
+function lab() {
+  const c = canvas(W, H);
+  c.rect(0, 252, W, 268, P.shadow);
+  const white = [235, 228, 242, 255];
+  const whiteDark = [204, 194, 216, 255];
+  c.rect(30, 110, 258, 258, white);
+  for (let y = 116; y < 258; y += 14) c.rect(30, y, 258, y + 1, whiteDark);
+  c.rect(30, 110, 258, 116, [250, 250, 250, 255]);
+  // the dome
+  c.disc(144, 110, 70, P.ink);
+  c.disc(144, 110, 68, P.tealDark);
+  c.disc(144, 110, 62, P.teal);
+  c.disc(126, 92, 22, [66, 150, 144, 255]);
+  c.rect(30, 110, 258, 114, P.ink);
+  for (let a = -80; a <= 80; a += 20) {
+    const x = Math.round(144 + Math.cos(((a - 90) * Math.PI) / 180) * 64);
+    const y = Math.round(110 + Math.sin(((a - 90) * Math.PI) / 180) * 64);
+    c.rect(x - 1, y, x + 2, y + 6, P.tealDark);
+  }
+  // the lens at the top, lit
+  c.disc(144, 48, 12, P.ink);
+  c.disc(144, 48, 10, P.glass);
+  c.disc(141, 45, 4, P.glassLit);
+  // the aerial
+  c.rect(206, 8, 210, 70, P.ink);
+  for (const y of [14, 26, 38]) c.rect(196, y, 220, y + 2, P.steel);
+  c.disc(208, 6, 3, P.red);
+  // the round window
+  c.disc(144, 172, 30, P.ink);
+  c.disc(144, 172, 27, P.glass);
+  c.disc(134, 162, 10, P.glassLit);
+  c.rect(142, 145, 146, 199, P.ink);
+  c.rect(117, 170, 171, 174, P.ink);
+  // side windows, teal-framed
+  for (const wx of [52, 208]) {
+    c.rect(wx, 140, wx + 28, 176, P.tealDark);
+    c.rect(wx + 3, 143, wx + 25, 173, P.glass);
+    c.rect(wx + 3, 143, wx + 10, 150, P.glassLit);
+  }
+  // sign band
+  c.rect(78, 150, 210, 168, P.yellow);
+  c.rect(78, 150, 210, 153, P.slabLit);
+  c.outline(77, 149, 211, 169);
+  // the door: a teal airlock
+  const dx = (W - 48) / 2;
+  c.rect(dx - 8, 208, dx + 56, 258, P.tealDark);
+  c.rect(dx - 4, 212, dx + 52, 258, P.ink);
+  c.rect(dx, 216, dx + 48, 258, [159, 211, 234, 255]);
+  c.rect(dx + 22, 216, dx + 26, 258, P.ink);
+  c.rect(dx + 4, 220, dx + 18, 232, P.glassLit);
+  c.rect(dx - 12, 258, dx + 60, 266, P.slab);
+  c.rect(dx - 12, 258, dx + 60, 260, P.slabLit);
+  c.outline(dx - 12, 257, dx + 60, 267);
+  // ground-floor vents
+  for (const vx of [40, 232]) {
+    c.rect(vx, 224, vx + 16, 244, P.steelDark);
+    for (let y = 227; y < 244; y += 4) c.rect(vx + 2, y, vx + 14, y + 1, P.steel);
+    c.outline(vx, 224, vx + 16, 245);
+  }
+  c.outline(30, 110, 258, 259);
+  return c;
+}
+
 // ── Little buildings on a campus: 144px square, sign band blank ──
 const S = 144;
 function site(draw) {
@@ -903,6 +967,23 @@ function siteOfficeOperations() {
   });
 }
 
+/** The same picture at twice the size, each pixel doubled: still pixel art. */
+function doubled(c) {
+  const out = canvas(c.w * 2, c.h * 2);
+  for (let y = 0; y < c.h; y++) {
+    for (let x = 0; x < c.w; x++) {
+      const i = (y * c.w + x) * 4;
+      const px = [c.px[i], c.px[i + 1], c.px[i + 2], c.px[i + 3]];
+      for (let dy = 0; dy < 2; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          out.px.set(px, ((y * 2 + dy) * out.w + x * 2 + dx) * 4);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // ── PNG ──
 let T = null;
 const crc32 = (buf) => {
@@ -968,3 +1049,10 @@ save("site_office_operations.png", siteOfficeOperations());
 save("van_96x144.png", van());
 save("asphalt_48.png", asphalt());
 save("pond_288x192.png", pond());
+save("site_office_sales_2x.png", doubled(siteOfficeSales()));
+save("site_office_finance_2x.png", doubled(siteOfficeFinance()));
+save("site_office_operations_2x.png", doubled(siteOfficeOperations()));
+save("site_store_2x.png", doubled(siteStore()));
+save("site_garage_2x.png", doubled(siteGarage()));
+save("site_warehouse_2x.png", doubled(siteWarehouse()));
+save("building_lab.png", lab());

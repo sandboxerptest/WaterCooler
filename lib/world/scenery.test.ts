@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCENERY, everyDoorReachable, groundTiles, propBody, propBounds } from "./scenery";
+import { PAVED, SCENERY, everyDoorReachable, groundTiles, propBody, propBounds } from "./scenery";
 import {
   BUILDINGS,
   TILE,
@@ -80,6 +80,23 @@ describe("props", () => {
       if (!body) continue;
       for (const zone of keepClear)
         expect(overlaps(body, zone), `${p.kind} at ${p.x},${p.y}`).toBe(false);
+    }
+  });
+
+  it("stay off the walkways, apart from the benches and the fountain", () => {
+    const paving = PAVED.map((r) => ({
+      x: r.x * TILE,
+      y: r.y * TILE,
+      width: r.width * TILE,
+      height: r.height * TILE,
+    }));
+    for (const p of SCENERY) {
+      if (p.kind === "bench" || p.kind === "fountain") continue;
+      const body = propBody(p);
+      if (!body) continue;
+      for (const tile of paving) {
+        expect(overlaps(body, tile), `${p.kind} at ${p.x},${p.y} on the walkway`).toBe(false);
+      }
     }
   });
 

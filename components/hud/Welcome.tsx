@@ -11,7 +11,8 @@ import { textureKeyFor, type RosterCharacter } from "@/lib/characters/library";
 import { isComplete, profileSnapshot, saveProfile, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
 import { addressFromLocation } from "@/lib/world/floors";
-import { ORGANISATIONS, tenantUrl, tenantsOf } from "@/lib/world/tenants";
+import { ORGANISATIONS } from "@/lib/world/tenants";
+import { WORLD_PATH, isOutdoorPath } from "@/lib/world/paths";
 
 const PORTRAIT_SCALE = 1.5;
 const NAME_LIMIT = 16;
@@ -24,7 +25,8 @@ const NAME_LIMIT = 16;
  * are chosen this covers the office; once they are, it steps aside and takes
  * the person to their home building's lobby.
  *
- * The bare app (/) is not a place. With a profile it forwards home.
+ * The bare app (/) is not a place. With a profile it forwards to the world
+ * map, where the game begins.
  */
 export default function Welcome() {
   // Null on the server, so nothing renders there; the client decides.
@@ -38,8 +40,8 @@ export default function Welcome() {
 
   useEffect(() => {
     if (!done || !profile?.home) return;
-    if (!addressFromLocation(window.location)) {
-      window.location.replace(tenantUrl(tenantsOf(profile.home)[0]));
+    if (!addressFromLocation(window.location) && !isOutdoorPath(window.location.pathname)) {
+      window.location.replace(WORLD_PATH);
     }
   }, [done, profile]);
 
@@ -55,12 +57,10 @@ export default function Welcome() {
       home,
       character: { key: textureKeyFor(character), path: character.sheetUrl },
     });
-    // Put a desk with this name on the building's floor before arriving.
+    // Put a desk with this name on the building's floor, then walk in: the
+    // game begins on the world map, by the fountain.
     await registerProfile(profileSnapshot());
-    const here = addressFromLocation(window.location);
-    // The room socket sends the name when it joins, so arrive cleanly.
-    if (here?.tenant.org === home) window.location.reload();
-    else window.location.assign(tenantUrl(tenantsOf(home)[0]));
+    window.location.assign(WORLD_PATH);
   };
 
   return createPortal(

@@ -6,13 +6,15 @@ import { Pathfinder } from "../utils/Pathfinder";
 import { ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
 import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
-import { PF_PADDING } from "@/lib/constants";
+import { PF_PADDING, ZOOM_MAX, ZOOM_MIN } from "@/lib/constants";
+import { frameZoom } from "@/lib/camera";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
 import { ArrivalWalk } from "@/lib/arrival";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { rememberedCharacter } from "@/lib/characters/choice";
 import { createLogger } from "@/lib/logger";
 import { gameEvents } from "@/lib/events";
+import { campusPath, showAddress } from "@/lib/world/paths";
 import { TILE, organisationFor, type Rect } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
 import {
@@ -43,6 +45,8 @@ const SIGN_Y: Record<string, number> = {
   "site-office-finance": 100,
   "site-office-operations": 104,
 };
+// The same pictures doubled, for a yard that fills the screen.
+for (const [key, y] of Object.entries(SIGN_Y)) SIGN_Y[`${key}-2x`] = y * 2;
 /** A door zone target meaning "back out to the world map". */
 const EXIT_TARGET = "world";
 
@@ -84,6 +88,7 @@ export class CampusScene extends Phaser.Scene {
     this.load.image(PROPS_KEY, "/sprites/world/props.png");
     this.load.json("world-props-frames", "/sprites/world/props.json");
     for (const key of Object.keys(SIGN_Y)) {
+      if (key === "site-office-2x") continue;
       this.load.image(key, `/sprites/world/${key.replace(/-/g, "_")}.png`);
     }
     if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, SPRITE_PATH);
@@ -99,6 +104,10 @@ export class CampusScene extends Phaser.Scene {
     this.campus = campus;
     this.leaving = false;
     this.latch.reset();
+    // A walk that was still under way when a door fired must not resume here.
+    this.navigator.cancel();
+    // Reached in-page from the world or a lobby: say so in the bar, so a reload comes back here.
+    showAddress(campusPath(campus.slug));
     if (!this.anims.exists("idle-down")) buildSpriteFrames(this, SPRITE_KEY);
     this.cutFrames();
 
@@ -138,13 +147,18 @@ export class CampusScene extends Phaser.Scene {
       });
     }
 
-    // The whole yard on one screen, like the lobby: a menu, not a place.
+    // The whole yard on one screen, at the same scale as every room: the
+    // lobby's zoom, not a fit of its own, so nothing here looks larger or
+    // smaller than it does through a door.
     const cam = this.cameras.main;
     cam.setBackgroundColor("#1a1814");
     cam.setRoundPixels(true);
-    const fit = Math.min(cam.width / width, cam.height / height);
-    cam.setZoom(Math.min(2, Math.max(0.5, fit)));
+    cam.setZoom(frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX));
     cam.centerOn(width / 2, height / 2);
+    this.scale.on("resize", () => {
+      cam.setZoom(frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX));
+      cam.centerOn(width / 2, height / 2);
+    });
 
     // Whose yard this is, across the top.
     const company = organisationFor(campus.slug);
@@ -242,11 +256,11 @@ export class CampusScene extends Phaser.Scene {
         (b.tenant.location ?? "").toUpperCase(),
         {
           fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-          fontSize: "11px",
+          fontSize: b.art.endsWith("-2x") ? "16px" : "11px",
           color: "#1b1b2a",
           align: "center",
           backgroundColor: "#e0b870",
-          padding: { x: 5, y: 2 },
+          padding: { x: 6, y: 3 },
         },
       )
       .setOrigin(0.5, 0.5)

@@ -266,11 +266,10 @@ export class OfficeScene extends Phaser.Scene {
       this.arrival.begin("down", ARRIVAL_STEPS);
     }
     // Doors to the rooms next door say where they go.
+    // A lobby's front door needs no sign; a store's does, since it is one of several.
+    const lobbyHere = address ? hasFloors(address.tenant) : true;
     for (const zone of zones) {
-      if (
-        zone.target.startsWith("room:") ||
-        (zone.name === "door" && !hasFloors(address?.tenant ?? tenantFor("")!))
-      ) {
+      if (zone.target.startsWith("room:") || (zone.name === "door" && !lobbyHere)) {
         this.addDoorSign(zone);
       }
     }
