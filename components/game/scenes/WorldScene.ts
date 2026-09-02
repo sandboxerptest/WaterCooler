@@ -35,7 +35,6 @@ const log = createLogger("World");
 
 const GROUND = { grass: "world-grass", paving: "world-paving", kerb: "world-kerb" } as const;
 const PROPS_KEY = "world-props";
-const CAFE_KEY = "world-cafe";
 /** Where each building's name goes: the blank sign the picture leaves, from the frame's top. */
 const SIGN_Y = { castle: 175, office: 186 } as const;
 
@@ -81,8 +80,6 @@ export class WorldScene extends Phaser.Scene {
     this.load.image("world-office", "/sprites/world/building_office.png");
     this.load.image(PROPS_KEY, "/sprites/world/props.png");
     this.load.json("world-props-frames", "/sprites/world/props.json");
-    // The café furniture is the interiors' own, so it matches the rooms.
-    this.load.image(CAFE_KEY, "/tilesets/9_Fishing_48x48.png");
     // Normally already loaded by the office; guarded for a direct arrival.
     if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, SPRITE_PATH);
   }
@@ -183,17 +180,12 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  /** Name the rectangles of the props sheet and the tileset so they can be drawn by name. */
+  /** Name the rectangles of the props sheet so they can be drawn by name. */
   private cutFrames() {
     const props = this.textures.get(PROPS_KEY);
     const frames = this.cache.json.get("world-props-frames") as Record<string, Rect> | undefined;
     for (const [name, r] of Object.entries(frames ?? {})) {
       if (!props.has(name)) props.add(name, 0, r.x, r.y, r.width, r.height);
-    }
-    const cafe = this.textures.get(CAFE_KEY);
-    for (const [name, spec] of Object.entries(PROPS) as [string, PropSpec][]) {
-      if (spec.source !== "cafe" || !spec.crop || cafe.has(name)) continue;
-      cafe.add(name, 0, spec.crop.x, spec.crop.y, spec.crop.width, spec.crop.height);
     }
     if (!this.anims.exists("world-fountain")) {
       this.anims.create({
@@ -222,10 +214,9 @@ export class WorldScene extends Phaser.Scene {
 
   private placeProp(prop: PlacedProp, walls: Phaser.Physics.Arcade.StaticGroup) {
     const spec: PropSpec = PROPS[prop.kind];
-    const key = spec.source === "cafe" ? CAFE_KEY : PROPS_KEY;
     const image = spec.animate
-      ? this.add.sprite(prop.x, prop.y, key, prop.kind).play("world-fountain")
-      : this.add.image(prop.x, prop.y, key, prop.kind);
+      ? this.add.sprite(prop.x, prop.y, PROPS_KEY, prop.kind).play("world-fountain")
+      : this.add.image(prop.x, prop.y, PROPS_KEY, prop.kind);
     // Feet on the ground; whoever's feet are lower stands in front.
     image.setOrigin(0.5, 1).setDepth(prop.y);
     const body = propBody(prop);
@@ -260,17 +251,6 @@ export class WorldScene extends Phaser.Scene {
         align: "center",
       })
       .setOrigin(0.5, 0.5)
-      .setDepth(foot + 1)
-      .setResolution(2);
-    this.add
-      .text(b.frame.x + b.frame.width / 2, b.frame.y - 10, b.tenant.tagline, {
-        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "9px",
-        color: "#e8e4d8",
-        stroke: "#1b1b2a",
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
       .setDepth(foot + 1)
       .setResolution(2);
 

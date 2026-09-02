@@ -16,9 +16,16 @@ import {
 import { gameEvents } from "@/lib/events";
 import { rememberCharacter, rememberedCharacter } from "@/lib/characters/choice";
 import { roomFromLocation } from "@/lib/rooms";
-import { addressFromLocation, mapFileFor, occupantsOf, type Address } from "@/lib/world/floors";
+import {
+  addressFromLocation,
+  describeFloor,
+  mapFileFor,
+  occupantsOf,
+  type Address,
+} from "@/lib/world/floors";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
+import { WHITEBOARD } from "@/lib/map/office";
 import { fetchPeople } from "@/lib/people-client";
 import { ensureSheet } from "../utils/sheets";
 import { createLogger } from "@/lib/logger";
@@ -76,6 +83,8 @@ export class OfficeScene extends Phaser.Scene {
   private bucketPrompt: Phaser.GameObjects.Text | null = null;
   private pingPongOpen = false;
   private elevatorOpen = false;
+  /** False while a just-opened dialog waits for the stick and keys to be let go. */
+  private dialogArmed = true;
   private boardPrompt: Phaser.GameObjects.Text | null = null;
   private whiteboardOpen = false;
   private eKey!: Phaser.Input.Keyboard.Key;
@@ -266,17 +275,25 @@ export class OfficeScene extends Phaser.Scene {
       this.addSign(this.bucketZone, "PONG", table.getTopCenter().y);
     }
     if (this.cauldronZone) {
+      // Right up against the top wall: its point is one row below its foot.
       const machine = this.add.image(
         this.cauldronZone.x,
-        this.cauldronZone.y - 82,
+        this.cauldronZone.y - 60,
         "pinball-machine",
       );
       machine.setDepth(4);
       this.addSign(this.cauldronZone, "PINBALL", machine.getTopCenter().y);
     }
-    // The board hangs on the wall; its sign sits on the floor below, where
-    // you stand to use it, and the arrow marks the spot.
-    for (const board of this.boardZones) this.addSign(board, "WHITEBOARD", board.y + 92, "below");
+    // The board hangs on the wall; its sign goes above it, centred on the
+    // board itself — its point is on the board's right-hand tile — with the
+    // arrow on the wall's cap.
+    const boardCentreX = (WHITEBOARD.region.dx + WHITEBOARD.region.sw / 2) * 48;
+    for (const board of this.boardZones) {
+      this.addSign({ x: boardCentreX, y: board.y }, "WHITEBOARD", 62);
+    }
+
+    // The building's name on the wall, so a glance says whose lobby this is.
+    if (address) this.addWallSign(address);
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
@@ -352,6 +369,9 @@ export class OfficeScene extends Phaser.Scene {
     const unsubDoor = gameEvents.on("transition-entered", (name, target) => {
       if (target === "elevator") {
         this.elevatorOpen = true;
+        // Opened by walking in with a direction held; that direction must
+        // not also drive the menu.
+        this.dialogArmed = false;
         gameEvents.emit("open-elevator");
         return;
       }
@@ -499,6 +519,29 @@ export class OfficeScene extends Phaser.Scene {
     log.info(
       `${occupants.length} desk(s) on ${address.tenant.name} floor ${address.floor.kind === "floor" ? address.floor.level : 0}`,
     );
+  }
+
+  /** The tenant's name and where you are, lettered on the top wall between the door and the board. */
+  private addWallSign(address: Address) {
+    const x = 6 * 48;
+    this.add
+      .text(x, 94, address.tenant.name.toUpperCase(), {
+        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
+        fontSize: "14px",
+        color: "#3a3a50",
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(3)
+      .setResolution(2);
+    this.add
+      .text(x, 100, describeFloor(address).toUpperCase(), {
+        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
+        fontSize: "11px",
+        color: "#565972",
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(3)
+      .setResolution(2);
   }
 
   /**
@@ -739,6 +782,11 @@ export class OfficeScene extends Phaser.Scene {
    */
   private updateDialogNavigation() {
     const pad = this.gamepad;
+    if (!this.dialogArmed) {
+      const held = pad.velocity(MOVE_SPEED);
+      if (held.vx !== 0 || held.vy !== 0 || this.player.hasKeyboardInput()) return;
+      this.dialogArmed = true;
+    }
 
     const back =
       pad.justPressed("menuUp") ||

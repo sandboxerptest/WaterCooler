@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { buildOfficeSpec, HEIGHT, PLAYER_START, STANDABLE, WALLS, WIDTH } from "../office";
+import { buildOfficeSpec, CUTOUT, HEIGHT, PLAYER_START, STANDABLE, WALLS, WIDTH } from "../office";
 import {
   deriveCollisions,
   generateMap,
@@ -47,11 +47,24 @@ describe("generated office map", () => {
     const at = (x: number, y: number) => floor[y * WIDTH + x];
     for (let x = 0; x < WIDTH; x++) {
       expect(at(x, 0), `top edge at x=${x}`).not.toBe(0);
-      expect(at(x, HEIGHT - 1), `bottom edge at x=${x}`).not.toBe(0);
+      // The bottom edge is the notch's left of it, the room's right of it.
+      const bottomRow = x < CUTOUT.x + CUTOUT.width ? CUTOUT.y - 1 : HEIGHT - 1;
+      expect(at(x, bottomRow), `bottom edge at x=${x}`).not.toBe(0);
     }
     for (let y = 0; y < HEIGHT; y++) {
-      expect(at(0, y), `left edge at y=${y}`).not.toBe(0);
+      // Beside the notch the left edge is the notch's right-hand side.
+      const leftCol = y >= CUTOUT.y ? CUTOUT.x + CUTOUT.width : 0;
+      expect(at(leftCol, y), `left edge at y=${y}`).not.toBe(0);
       expect(at(WIDTH - 1, y), `right edge at y=${y}`).not.toBe(0);
+    }
+  });
+
+  it("leaves the notch empty", () => {
+    const floor = tileLayer("floor").data;
+    for (let y = CUTOUT.y; y < CUTOUT.y + CUTOUT.height; y++) {
+      for (let x = CUTOUT.x; x < CUTOUT.x + CUTOUT.width; x++) {
+        expect(floor[y * WIDTH + x], `notch at ${x},${y}`).toBe(0);
+      }
     }
   });
 
@@ -64,8 +77,18 @@ describe("generated office map", () => {
       Array.from({ length: WIDTH }, (_, x) => floor[y * WIDTH + x] !== 0),
     );
     const exterior = findExterior(floored);
-    const escapes = exterior.flat().filter(Boolean).length;
-    expect(escapes).toBe(0);
+    // The only outside within the map's box is the notch; the flood must
+    // never get past its walls into the room.
+    exterior.forEach((row, y) =>
+      row.forEach((outside, x) => {
+        const inNotch =
+          x >= CUTOUT.x &&
+          x < CUTOUT.x + CUTOUT.width &&
+          y >= CUTOUT.y &&
+          y < CUTOUT.y + CUTOUT.height;
+        expect(outside, `exterior at ${x},${y}`).toBe(inNotch);
+      }),
+    );
   });
 
   it("fills the room with floor rather than leaving gaps", () => {
@@ -141,6 +164,9 @@ describe("wall collisions", () => {
     const firstFloorRow = topWallRows(spec) + 1;
     for (let y = firstFloorRow; y < HEIGHT - 1; y++) {
       for (let x = 1; x < WIDTH - 1; x++) {
+        // The notch, and the wall bent around it, are not floor.
+        const notchWalls = y >= CUTOUT.y - 1 && x <= CUTOUT.x + CUTOUT.width;
+        if (notchWalls) continue;
         expect(solid(x, y), `floor at ${x},${y} should be walkable`).toBe(false);
       }
     }
@@ -165,7 +191,8 @@ describe("transitions", () => {
     // is one of the lift's.
     expect(door.tx).toBeGreaterThanOrEqual(lift.tx);
     expect(door.tx).toBeLessThan(lift.tx + (lift.tw ?? 1));
-    expect(lift.ty + (lift.th ?? 1)).toBe(HEIGHT);
+    // At the bottom of the left part, which ends where the notch begins.
+    expect(lift.ty + (lift.th ?? 1)).toBe(CUTOUT.y);
   });
 
   it("gives each doorway floor to stand on", () => {

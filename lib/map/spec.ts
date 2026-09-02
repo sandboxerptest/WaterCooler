@@ -113,4 +113,10 @@ export interface RoomSpec {
    * from `solid` placements are added to these.
    */
   collisions?: Rect[];
+  /**
+   * A rectangle of the room's bounding box that is not room, in tiles: the
+   * bottom-left, for a room shaped like a 7. Walls are drawn around it and
+   * it is solid.
+   */
+  cutout?: { x: number; y: number; width: number; height: number };
 }

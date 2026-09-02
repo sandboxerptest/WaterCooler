@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PROPS,
-  SCENERY,
-  everyDoorReachable,
-  groundTiles,
-  propBody,
-  propBounds,
-  type PropSpec,
-} from "./scenery";
+import { SCENERY, everyDoorReachable, groundTiles, propBody, propBounds } from "./scenery";
 import {
   BUILDINGS,
   TILE,
@@ -59,16 +51,6 @@ describe("ground", () => {
 });
 
 describe("props", () => {
-  it("cut café pieces from whole tiles of the fishing sheet", () => {
-    for (const spec of Object.values(PROPS) as PropSpec[]) {
-      if (spec.source !== "cafe") continue;
-      expect(spec.crop).toBeDefined();
-      for (const v of Object.values(spec.crop!)) expect(v % TILE).toBe(0);
-      expect(spec.crop!.width).toBe(spec.width);
-      expect(spec.crop!.height).toBe(spec.height);
-    }
-  });
-
   it("stand inside the map", () => {
     for (const p of SCENERY) {
       const r = propBounds(p);

@@ -1,8 +1,8 @@
 /**
  * The open-plan office.
  *
- * One room that fits on the screen, with a door at the top left and the lift
- * below it at the bottom left, a whiteboard on the wall and a game in the corner:
+ * One room that fits on the screen, shaped like a 7, with a door at the top
+ * left and the lift below it at the bottom of the left part, a whiteboard on the wall and a game in the corner:
  * a menu as much as a place. The whiteboard is lifted out of the old
  * partitioned map (see ./harvest.ts), so the art is unchanged.
  */
@@ -11,7 +11,17 @@ import { harvest, type Region, type SourceMap } from "./harvest";
 import type { PoiSpec, RoomSpec, WallVocabulary } from "./spec";
 
 export const WIDTH = 20;
-export const HEIGHT = 14;
+export const HEIGHT = 19;
+
+/**
+ * The room is shaped like a 7: full width for the top rows, then only the
+ * right-hand two thirds carry on down. The lift stays at the bottom of the
+ * left part, under the door; the longer right part is room for more to do.
+ */
+export const CUTOUT = { x: 0, y: 14, width: 6, height: 5 } as const;
+
+/** The last floor row of the left part: where the lift stands. */
+export const LEFT_BOTTOM = CUTOUT.y - 1;
 export const TILE = 48;
 
 /**
@@ -100,9 +110,10 @@ export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
     poi: { name: "Ping pong table", tx: 16, ty: 6, facing: "up" },
   },
   pinball: {
-    // Likewise: public/sprites/pinball_machine_96x120.png.
-    region: { label: "pinball machine", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 4, layers: [] },
-    poi: { name: "Pinball machine", tx: 16, ty: 6, facing: "up" },
+    // Likewise: public/sprites/pinball_machine_96x120.png. Right up against
+    // the top wall, so its footprint starts on the wall's shadow row.
+    region: { label: "pinball machine", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 3, layers: [] },
+    poi: { name: "Pinball machine", tx: 16, ty: 5, facing: "up" },
   },
 };
 
@@ -130,6 +141,7 @@ export function buildOfficeSpec(source: SourceMap, game?: Game): RoomSpec {
     pois: [WHITEBOARD.poi, ...(game ? [GAMES[game].poi] : [])],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],
     collisions: cornerBoxes,
+    cutout: CUTOUT,
     transitions: [
       // The door leads outside, to the world map. The lift is still a stub —
       // it will lead to a person's own office one day.
@@ -140,7 +152,15 @@ export function buildOfficeSpec(source: SourceMap, game?: Game): RoomSpec {
       { name: "door", target: "world", tx: 2, ty: 0, tw: 1, th: 4, facing: "up" },
       // Under the door, so from the world map one held key — down — takes
       // you in through the door, across the lobby and into the lift.
-      { name: "elevator", target: "elevator", tx: 2, ty: HEIGHT - 2, tw: 2, th: 2, facing: "down" },
+      {
+        name: "elevator",
+        target: "elevator",
+        tx: 2,
+        ty: LEFT_BOTTOM - 1,
+        tw: 2,
+        th: 2,
+        facing: "down",
+      },
     ],
   };
 }

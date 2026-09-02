@@ -72,9 +72,6 @@ export default function TopBar({
             <span className={`pixel-dot pixel-dot--${seatDotColor(seat)}`} />
           </button>
         ))}
-        {assignedSeats.length === 0 && (
-          <span className="topbar-agent-pill__empty">No agents assigned</span>
-        )}
       </div>
 
       {/* Right: tool buttons group */}

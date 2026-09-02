@@ -136,6 +136,22 @@ export function paintShell(spec: RoomSpec): number[] {
   at(0, h - 1, v.cornerBL);
   at(w - 1, h - 1, v.cornerBR);
 
+  // A notch out of the bottom-left: empty, with the wall bent around it.
+  // The bottom wall of the part above it runs along the notch's top row,
+  // turns down the notch's right side, and the room's bottom-left corner
+  // moves to where the notch meets the bottom wall.
+  const c = spec.cutout;
+  if (c) {
+    for (let y = c.y; y < c.y + c.height; y++)
+      for (let x = c.x; x < c.x + c.width; x++) at(x, y, 0);
+    const top = c.y - 1;
+    const side = c.x + c.width;
+    for (let x = c.x + 1; x <= side; x++) at(x, top, v.bottomRun);
+    at(c.x, top, v.cornerBL);
+    for (let y = c.y; y < h - 1; y++) at(side, y, v.edgeLeft);
+    at(side, h - 1, v.cornerBL);
+  }
+
   return grid;
 }
 
@@ -166,12 +182,25 @@ export function wallCollisions(spec: RoomSpec): Rect[] {
   const t = spec.tileSize;
   const w = spec.width * t;
   const h = spec.height * t;
-  return [
+  const rects: Rect[] = [
     { x: 0, y: 0, width: w, height: topWallRows(spec) * t },
     { x: 0, y: h - t, width: w, height: t },
     { x: 0, y: 0, width: t, height: h },
     { x: w - t, y: 0, width: t, height: h },
   ];
+  const c = spec.cutout;
+  if (c) {
+    // The notch itself, plus the wall along its top and down its side.
+    rects.push({ x: c.x * t, y: c.y * t, width: c.width * t, height: c.height * t });
+    rects.push({ x: c.x * t, y: (c.y - 1) * t, width: (c.width + 1) * t, height: t });
+    rects.push({
+      x: (c.x + c.width) * t,
+      y: (c.y - 1) * t,
+      width: t,
+      height: (h / t - c.y + 1) * t,
+    });
+  }
+  return rects;
 }
 
 /**

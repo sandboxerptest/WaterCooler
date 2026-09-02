@@ -6,10 +6,9 @@
  * props are placed by their feet (bottom centre), which is also how they
  * sort against people: whoever's feet are lower is drawn in front.
  *
- * Café furniture is borrowed from the fishing tileset the interiors ship
- * with, so it matches the rooms; the rest is drawn by
- * scripts/make-world-art.mjs in the same palette. Nothing here touches
- * Phaser, so the layout can be checked without a browser.
+ * The props are drawn by scripts/make-world-art.mjs in the interiors'
+ * palette. Nothing here touches Phaser, so the layout can be checked
+ * without a browser.
  */
 
 import {
@@ -68,13 +67,7 @@ export function groundTiles(): Ground[][] {
 
 // ── Props ──────────────────────────────────────────────
 
-export type PropSource = "drawn" | "cafe";
-
 export interface PropSpec {
-  /** "drawn" frames come from props.png; "cafe" ones are cut from the fishing tileset. */
-  source: PropSource;
-  /** For "cafe": the rectangle to cut, in tileset pixels. */
-  crop?: Rect;
   width: number;
   height: number;
   /** The solid part at the foot, centred on the prop's feet. Absent means walk-through. */
@@ -84,42 +77,19 @@ export interface PropSpec {
 }
 
 export const PROPS = {
-  tree: { source: "drawn", width: 96, height: 120, footprint: { width: 22, height: 22 } },
-  bush: { source: "drawn", width: 64, height: 48, footprint: { width: 48, height: 18 } },
-  lamp: { source: "drawn", width: 32, height: 96, footprint: { width: 14, height: 10 } },
-  bench: { source: "drawn", width: 96, height: 48, footprint: { width: 92, height: 26 } },
+  tree: { width: 96, height: 120, footprint: { width: 22, height: 22 } },
+  bush: { width: 64, height: 48, footprint: { width: 48, height: 18 } },
+  lamp: { width: 32, height: 96, footprint: { width: 14, height: 10 } },
+  bench: { width: 96, height: 48, footprint: { width: 92, height: 26 } },
   fountain: {
-    source: "drawn",
     width: 144,
     height: 96,
     footprint: { width: 132, height: 52 },
     animate: true,
   },
-  planter: { source: "drawn", width: 64, height: 48, footprint: { width: 52, height: 20 } },
-  signpost: { source: "drawn", width: 48, height: 96, footprint: { width: 12, height: 10 } },
-  "cafe-green-white": cafe(0, 912),
-  "cafe-green-orange": cafe(192, 912),
-  "cafe-blue-white": cafe(0, 1056),
-  "cafe-blue-orange": cafe(192, 1056),
-  "cafe-white-orange": cafe(576, 1056),
-  stones: {
-    source: "cafe",
-    crop: { x: 288, y: 336, width: 144, height: 96 },
-    width: 144,
-    height: 96,
-    footprint: { width: 130, height: 70 },
-  },
+  planter: { width: 64, height: 48, footprint: { width: 52, height: 20 } },
+  signpost: { width: 48, height: 96, footprint: { width: 12, height: 10 } },
 } as const satisfies Record<string, PropSpec>;
-
-function cafe(x: number, y: number): PropSpec {
-  return {
-    source: "cafe",
-    crop: { x, y, width: 192, height: 144 },
-    width: 192,
-    height: 144,
-    footprint: { width: 136, height: 62 },
-  };
-}
 
 export type PropKind = keyof typeof PROPS;
 
@@ -150,17 +120,10 @@ export const SCENERY: readonly PlacedProp[] = [
   { kind: "lamp", x: 452, y: 540 },
   { kind: "lamp", x: 988, y: 540 },
   { kind: "lamp", x: 1124, y: 540 },
-  // Terraces outside each business.
-  { kind: "cafe-green-white", x: 170, y: 640 },
-  { kind: "cafe-white-orange", x: 1270, y: 640 },
-  { kind: "stones", x: 150, y: 760 },
-  { kind: "stones", x: 1290, y: 760 },
-  // The plaza: a fountain, seats, and somewhere to sit outside.
+  // The plaza: a fountain and a bench.
   { kind: "planter", x: 620, y: 478 },
   { kind: "planter", x: 820, y: 478 },
   { kind: "fountain", x: 720, y: 620 },
-  { kind: "cafe-blue-white", x: 556, y: 730 },
-  { kind: "cafe-blue-orange", x: 884, y: 730 },
   { kind: "bench", x: 720, y: 720 },
   { kind: "lamp", x: 540, y: 560 },
   { kind: "lamp", x: 900, y: 560 },

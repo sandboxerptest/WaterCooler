@@ -10,7 +10,7 @@ import {
   wanderArea,
 } from "./residents";
 import { roomFromLocation } from "../rooms";
-import { HEIGHT, TILE, WIDTH } from "../map/office";
+import { CUTOUT, TILE, WIDTH } from "../map/office";
 
 const yoshi = RESIDENTS[0];
 
@@ -47,7 +47,8 @@ describe("the routine", () => {
     expect(area.x).toBeGreaterThanOrEqual(TILE);
     expect(area.y).toBeGreaterThan(4 * TILE);
     expect(area.x + area.width).toBeLessThan((WIDTH - 2) * TILE);
-    expect(area.y + area.height).toBeLessThan((HEIGHT - 2) * TILE);
+    // Never into the notch below the left part.
+    expect(area.y + area.height).toBeLessThanOrEqual((CUTOUT.y - 1) * TILE);
     expect(wanderArea("outside")).toBeNull();
     expect(wanderArea("office")).toBeNull();
   });

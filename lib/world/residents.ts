@@ -11,7 +11,7 @@
  */
 
 import { floorRoomSlug } from "../rooms";
-import { HEIGHT as LOBBY_ROWS, TILE, WIDTH as LOBBY_COLS } from "../map/office";
+import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { standingSpot } from "./desks";
 
 export interface Resident {
@@ -82,12 +82,8 @@ export interface Rect {
  */
 export function wanderArea(place: Place): Rect | null {
   if (place !== "lobby") return null;
-  return {
-    x: 2 * TILE,
-    y: 7 * TILE,
-    width: (LOBBY_COLS - 5) * TILE,
-    height: (LOBBY_ROWS - 10) * TILE,
-  };
+  // The wide part of the lobby only: the notch below the left part is void.
+  return { x: 2 * TILE, y: 7 * TILE, width: (LOBBY_COLS - 5) * TILE, height: 5 * TILE };
 }
 
 /** How long a resident stays somewhere before moving on, in milliseconds. */

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { ROOM_FRAME, fitZoom, frameZoom } from "../camera";
 
-// The lobby is 20x14 tiles at 48px.
+// The lobby is 20x19 tiles at 48px.
 const MAP_W = 960;
-const MAP_H = 672;
+const MAP_H = 912;
 
 describe("fitZoom", () => {
   it("fits the room inside the viewport rather than covering it", () => {
@@ -28,14 +28,14 @@ describe("frameZoom", () => {
     expect(frameZoom(MAP_W, MAP_H, 0.5, 2)).toBe(1);
     // A floor is the same size as the lobby, so it fits the same; a smaller
     // room would too, without zooming in on it.
-    expect(frameZoom(1920, 1344, 0.5, 2)).toBe(2);
+    expect(frameZoom(1920, 1824, 0.5, 2)).toBe(2);
     expect(frameZoom(6000, 4000, 0.5, 2)).toBe(2);
     expect(frameZoom(200, 100, 0.5, 2)).toBe(0.5);
   });
 
   it("grows when the chat column collapses and the viewport widens", () => {
-    const open = frameZoom(800, 700, 0.5, 2);
-    const collapsed = frameZoom(1500, 700, 0.5, 2);
+    const open = frameZoom(800, 1000, 0.5, 2);
+    const collapsed = frameZoom(1500, 1000, 0.5, 2);
     expect(collapsed).toBeGreaterThan(open);
   });
 });
