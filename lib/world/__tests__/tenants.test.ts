@@ -27,6 +27,7 @@ describe("organisations and their lobbies", () => {
       "Blockhouse",
       "Homestar",
       "Mettara",
+      "Apeiron Media",
     ]);
   });
 
@@ -99,7 +100,9 @@ describe("the world map", () => {
   it("puts the doorway on the ground where a person can reach it", () => {
     for (const b of BUILDINGS) {
       expect(overlaps(b.door, b.solid)).toBe(false);
-      expect(b.door.y).toBeGreaterThanOrEqual(b.solid.y + b.solid.height);
+      // Under the building — or, for the ferry, on the dock beside it.
+      if (b.art === "world-boat") expect(b.door.x + b.door.width).toBeLessThanOrEqual(b.solid.x);
+      else expect(b.door.y).toBeGreaterThanOrEqual(b.solid.y + b.solid.height);
     }
   });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { CircleDollarSign, Gamepad2, Mic, MicOff, Sparkles, User, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { useVoice } from "@/lib/hooks/useVoice";
@@ -9,6 +9,8 @@ import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
 import ContextMeter from "./ContextMeter";
 import ControllerCheck from "./ControllerCheck";
+import { buttonLabel } from "@/lib/gamepad/buttons";
+import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
 
 interface BottomBarProps {
   connection: ConnectionStatus;
@@ -38,6 +40,7 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
 
   const [pad, setPad] = useState<{ id: string; layout: string } | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
+  const talk = buttonLabel(useSyncExternalStore(subscribeTalkButton, talkButton, talkButton));
 
   useEffect(() => {
     return gameEvents.on("gamepad-state", (id, layout) => {
@@ -55,7 +58,7 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
       : voice.status === "requesting"
         ? "Asking for the microphone…"
         : (voice.reason ??
-          "Switch on voice chat: people near you in the room will hear you. On a controller, hold LT to talk.");
+          `Switch on voice chat: people near you in the room will hear you. On a controller, hold ${talk} to talk.`);
 
   const totalSeats = seats.length;
   const assignedSeats = seats.filter((s) => s.assigned).length;
@@ -128,13 +131,13 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         onClick={() => setCheckOpen(true)}
         title={
           pad
-            ? `${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold LT to talk\nClick for the controller check.`
+            ? `${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold ${talk} to talk\nClick for the controller check.`
             : "No controller seen. Click for the controller check."
         }
         aria-label="Controller check"
       >
         <Gamepad2 size={10} />
-        <span>{pad ? `${pad.layout} · hold LT to talk` : "no pad"}</span>
+        <span>{pad ? `${pad.layout} · hold ${talk} to talk` : "no pad"}</span>
       </button>
       {checkOpen && <ControllerCheck onClose={() => setCheckOpen(false)} />}
       {budget && (

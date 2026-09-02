@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { XBOX, buttonLabel } from "@/lib/gamepad/buttons";
+import {
+  DEFAULT_TALK_BUTTON,
+  resetTalkButton,
+  setTalkButton,
+  subscribeTalkButton,
+  talkButton,
+} from "@/lib/gamepad/bindings";
+import { padMonitor } from "@/lib/gamepad/monitor";
 import PadLegend from "./PadLegend";
 
 /** What the browser reports, read straight from the Gamepad API. */
@@ -51,6 +59,22 @@ export default function ControllerCheck({ onClose }: { onClose: () => void }) {
   const [report, setReport] = useState<Report | null>(null);
   const [events, setEvents] = useState<string[]>([]);
   const [lastPress, setLastPress] = useState<string | null>(null);
+  /** Waiting for the person to press the button they want to talk with. */
+  const [choosing, setChoosing] = useState(false);
+  const talk = useSyncExternalStore(subscribeTalkButton, talkButton, talkButton);
+
+  // The next button down while choosing becomes the talk button. The
+  // d-pad, A and B are spoken for everywhere, so those are not offered.
+  useEffect(() => {
+    if (!choosing) return;
+    return padMonitor.subscribe((event) => {
+      if (event.phase !== "down") return;
+      const taken = [XBOX.A, XBOX.B, XBOX.UP, XBOX.DOWN, XBOX.LEFT, XBOX.RIGHT];
+      if (taken.includes(event.button as (typeof taken)[number])) return;
+      setTalkButton(event.button);
+      setChoosing(false);
+    });
+  }, [choosing]);
 
   useEffect(() => {
     const tick = () => {
@@ -162,6 +186,48 @@ export default function ControllerCheck({ onClose }: { onClose: () => void }) {
           ) : (
             <div>No connect events heard yet.</div>
           )}
+        </div>
+
+        <div className="controller-check__facts">
+          <div>
+            Hold to talk: <kbd className="pad-key">{buttonLabel(talk)}</kbd>{" "}
+            {choosing ? (
+              <span style={{ color: "var(--pixel-accent)" }}>
+                press the button you want to talk with…
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="pixel-button"
+                  style={{ fontSize: "8px", padding: "2px 6px" }}
+                  onClick={() => setChoosing(true)}
+                  disabled={!seen}
+                  title={
+                    seen
+                      ? "Press a button on the pad to make it the talk button"
+                      : "Plug in a controller first"
+                  }
+                >
+                  Change
+                </button>{" "}
+                {talk !== DEFAULT_TALK_BUTTON && (
+                  <button
+                    type="button"
+                    className="pixel-button"
+                    style={{ fontSize: "8px", padding: "2px 6px" }}
+                    onClick={() => resetTalkButton()}
+                  >
+                    Back to {buttonLabel(DEFAULT_TALK_BUTTON)}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          <div style={{ color: "var(--pixel-muted)", fontSize: "8px" }}>
+            Some pads report a bumper where the trigger should be; if the wrong button talks, pick
+            the one you want here and it is remembered in this browser.
+          </div>
         </div>
 
         <PadLegend

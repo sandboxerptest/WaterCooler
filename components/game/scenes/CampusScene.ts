@@ -19,24 +19,19 @@ import { campusPath, showAddress } from "@/lib/world/paths";
 import { TILE, organisationFor, type Rect } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
 import type { Whereabouts } from "@/lib/world/residents";
+import { groundGrid, propBody, signBody, tilesOf, waterBodies } from "@/lib/world/scenery";
 import {
-  PROPS,
-  groundGrid,
-  propBody,
-  tilesOf,
-  type PlacedProp,
-  type PropSpec,
-} from "@/lib/world/scenery";
+  addSolid,
+  cutOutdoorFrames,
+  layGround,
+  placeBoat,
+  placeProp,
+  placeSign,
+  preloadOutdoors,
+} from "./outdoors";
 
 const log = createLogger("Campus");
 
-const GROUND = {
-  grass: "world-grass",
-  paving: "world-paving",
-  kerb: "world-kerb",
-  asphalt: "world-asphalt",
-} as const;
-const PROPS_KEY = "world-props";
 /** Where each picture's sign band is, from the frame's top. */
 const SIGN_Y: Record<string, number> = {
   "site-warehouse": 61,
@@ -46,6 +41,7 @@ const SIGN_Y: Record<string, number> = {
   "site-office-sales": 109,
   "site-office-finance": 100,
   "site-office-operations": 104,
+  "site-irish": 64,
 };
 // The same pictures doubled, for a yard that fills the screen.
 for (const [key, y] of Object.entries(SIGN_Y)) SIGN_Y[`${key}-2x`] = y * 2;
@@ -85,12 +81,7 @@ export class CampusScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image(GROUND.grass, "/sprites/world/grass_48.png");
-    this.load.image(GROUND.paving, "/sprites/world/paving_48.png");
-    this.load.image(GROUND.kerb, "/sprites/world/kerb_48.png");
-    this.load.image(GROUND.asphalt, "/sprites/world/asphalt_48.png");
-    this.load.image(PROPS_KEY, "/sprites/world/props.png");
-    this.load.json("world-props-frames", "/sprites/world/props.json");
+    preloadOutdoors(this);
     for (const key of Object.keys(SIGN_Y)) {
       if (key === "site-office-2x") continue;
       this.load.image(key, `/sprites/world/${key.replace(/-/g, "_")}.png`);
@@ -114,21 +105,43 @@ export class CampusScene extends Phaser.Scene {
     // Reached in-page from the world or a lobby: say so in the bar, so a reload comes back here.
     showAddress(campusPath(campus.slug));
     if (!this.anims.exists("idle-down")) buildSpriteFrames(this, SPRITE_KEY);
-    this.cutFrames();
+    cutOutdoorFrames(this);
 
     const width = campus.columns * TILE;
     const height = campus.rows * TILE;
-    this.layGround(campus);
+    const ground = groundGrid(
+      campus.columns,
+      campus.rows,
+      campus.paved,
+      campus.buildings.map((b) => tilesOf(b.frame)),
+      [],
+      campus.water ?? [],
+      campus.dock ?? [],
+    );
+    layGround(this, ground);
     const walls = this.physics.add.staticGroup();
     this.zones = campus.buildings.map((b) => this.placeBuilding(b, walls));
-    this.zones.push({ name: "road", target: EXIT_TARGET, ...campus.exit, facing: "down" });
-    for (const prop of campus.props) this.placeProp(prop, walls);
+    this.zones.push({
+      name: campus.boat ? "ferry" : "road",
+      target: EXIT_TARGET,
+      ...campus.exit,
+      facing: "down",
+    });
+    for (const prop of campus.props) placeProp(this, prop, walls);
+    for (const sign of campus.signs ?? []) placeSign(this, sign, walls);
+    const company = organisationFor(campus.slug);
+    if (campus.boat) placeBoat(this, campus.boat, walls, company?.name ?? campus.slug);
+    const water = waterBodies(ground);
+    for (const body of water) addSolid(walls, body);
     this.pathfinder = new Pathfinder(
       width,
       height,
       [
         ...campus.buildings.map((b) => b.solid),
         ...campus.props.map(propBody).filter((r) => r !== null),
+        ...(campus.signs ?? []).map(signBody),
+        ...(campus.boat ? [{ ...campus.boat, width: 192, height: 168 }] : []),
+        ...water,
       ],
       PF_PADDING,
     );
@@ -166,7 +179,6 @@ export class CampusScene extends Phaser.Scene {
     });
 
     // Whose yard this is, across the top.
-    const company = organisationFor(campus.slug);
     this.add
       .text(width / 2, 14, (company?.name ?? campus.slug).toUpperCase(), {
         fontFamily: '"ArkPixel", "Press Start 2P", monospace',
@@ -181,7 +193,10 @@ export class CampusScene extends Phaser.Scene {
 
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
-    gameEvents.emit("place-changed", `${company?.name ?? campus.slug} · Campus`);
+    gameEvents.emit(
+      "place-changed",
+      `${company?.name ?? campus.slug} · ${campus.place ?? "Campus"}`,
+    );
 
     // Anyone out on the yard. It has no room, so ask where everyone is.
     void this.showResidents();
@@ -191,78 +206,20 @@ export class CampusScene extends Phaser.Scene {
     );
   }
 
-  private cutFrames() {
-    const props = this.textures.get(PROPS_KEY);
-    const frames = this.cache.json.get("world-props-frames") as Record<string, Rect> | undefined;
-    for (const [name, r] of Object.entries(frames ?? {})) {
-      if (!props.has(name)) props.add(name, 0, r.x, r.y, r.width, r.height);
-    }
-    if (!this.anims.exists("world-fountain")) {
-      this.anims.create({
-        key: "world-fountain",
-        frames: [
-          { key: PROPS_KEY, frame: "fountain" },
-          { key: PROPS_KEY, frame: "fountain2" },
-        ],
-        frameRate: 3,
-        repeat: -1,
-      });
-    }
-  }
-
-  private layGround(campus: Campus) {
-    const grid = groundGrid(
-      campus.columns,
-      campus.rows,
-      campus.paved,
-      campus.buildings.map((b) => tilesOf(b.frame)),
-    );
-    grid.forEach((row, ty) =>
-      row.forEach((ground, tx) => {
-        this.add
-          .image(tx * TILE, ty * TILE, GROUND[ground])
-          .setOrigin(0, 0)
-          .setDepth(0);
-      }),
-    );
-  }
-
-  private placeProp(prop: PlacedProp, walls: Phaser.Physics.Arcade.StaticGroup) {
-    const spec: PropSpec = PROPS[prop.kind];
-    const image = spec.animate
-      ? this.add.sprite(prop.x, prop.y, PROPS_KEY, prop.kind).play("world-fountain")
-      : this.add.image(prop.x, prop.y, PROPS_KEY, prop.kind);
-    image.setOrigin(0.5, 1).setDepth(prop.y);
-    const body = propBody(prop);
-    if (body) this.solid(walls, body);
-  }
-
-  private solid(walls: Phaser.Physics.Arcade.StaticGroup, r: Rect) {
-    const wall = walls.create(
-      r.x + r.width / 2,
-      r.y + r.height / 2,
-      undefined,
-      undefined,
-      false,
-    ) as Phaser.Physics.Arcade.Sprite;
-    wall.body!.setSize(r.width, r.height);
-    wall.setVisible(false);
-    (wall.body as Phaser.Physics.Arcade.StaticBody).enable = true;
-  }
-
   private placeBuilding(b: CampusBuilding, walls: Phaser.Physics.Arcade.StaticGroup): DoorZone {
     const foot = b.frame.y + b.frame.height;
     this.add.image(b.frame.x, b.frame.y, b.art).setOrigin(0, 0).setDepth(foot);
-    this.solid(walls, b.solid);
+    addSolid(walls, b.solid);
 
-    // What it is, on the sign band the picture leaves blank. The text
-    // carries its own strip of the band's colour, so a long name stays
-    // readable past the band's ends.
+    // What it is, on the sign band the picture leaves blank: the department,
+    // or the whole name for a building that is the organisation's only one.
+    // The text carries its own strip of the band's colour, so a long name
+    // stays readable past the band's ends.
     this.add
       .text(
         b.frame.x + b.frame.width / 2,
         b.frame.y + (SIGN_Y[b.art] ?? 60),
-        (b.tenant.location ?? "").toUpperCase(),
+        (b.tenant.location ?? b.tenant.name).toUpperCase(),
         {
           fontFamily: '"Press Start 2P", monospace',
           fontSize: b.art.endsWith("-2x") ? "18px" : "11px",
@@ -357,6 +314,8 @@ export class CampusScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     if (this.leaving) return;
+    // Read the pad every frame, or it never reports anything out here.
+    this.gamepad.poll();
     if (this.arrival.holdsInput) {
       if (this.arrival.walking) {
         this.player.drive(this.arrival.step(delta, MOVE_SPEED));

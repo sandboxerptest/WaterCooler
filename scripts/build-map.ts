@@ -54,6 +54,8 @@ for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby-castle-atlantic.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
+  // The island's house: Castle Atlantic's layout, ping pong table and all.
+  ["lobby-apeiron-media.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
   ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball", ["arcade"])],
   ["floor.json", buildFloorSpec],
   ...premises,

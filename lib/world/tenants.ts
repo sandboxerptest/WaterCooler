@@ -18,7 +18,7 @@
 
 import type { Game } from "../map/office";
 
-export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus" | "lab";
+export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus" | "lab" | "irish";
 
 export interface Organisation {
   slug: string;
@@ -38,6 +38,15 @@ export const ORGANISATIONS: readonly Organisation[] = [
   // Out of the way, past the trees at the far end of the south road: the
   // science lab that makes the whole world possible.
   { slug: "mettara", name: "Mettara", tagline: "Science lab", style: "lab" },
+  // Across the water: the island, reached by the ferry from the dock at
+  // the bottom of the map. Its "campus" is the island itself.
+  {
+    slug: "apeiron-media",
+    name: "Apeiron Media",
+    tagline: "Media house",
+    style: "irish",
+    campus: true,
+  },
 ];
 
 export function organisationFor(slug: string | null | undefined): Organisation | null {
@@ -86,6 +95,10 @@ export const TENANTS: readonly Tenant[] = [
   }),
   lobby("homestar-field-crew", "homestar", { location: "Field Crew", kind: "garage" }),
   lobby("mettara", "mettara"),
+  // The one house on the island: a lobby with floors, laid out like Castle
+  // Atlantic's, ping pong table and all. "office" is what makes it a
+  // building on its island the way a department is on a campus.
+  lobby("apeiron-media", "apeiron-media", { kind: "office", game: "pong" }),
 ];
 
 export function tenantFor(slug: string | null | undefined): Tenant | null {
@@ -127,8 +140,8 @@ export function storeOf(orgSlug: string): Tenant | null {
 export const TILE = 48;
 /** The stores to the west, the plaza in the middle, the campus to the east: each a short walk. */
 export const WORLD_COLUMNS = 62;
-/** Two rows of buildings deep: the businesses along the north road, plots for more along the south. */
-export const WORLD_ROWS = 34;
+/** Two rows of buildings deep: the businesses along the north road, plots for more along the south — and then the sea. */
+export const WORLD_ROWS = 39;
 export const WORLD_WIDTH = WORLD_COLUMNS * TILE;
 export const WORLD_HEIGHT = WORLD_ROWS * TILE;
 /** Where the middle stretch — the plaza between the two head offices — begins. */
@@ -142,6 +155,15 @@ export interface Rect {
   width: number;
   height: number;
 }
+
+// ── The shore ───────────────────────────────────────────
+
+/** The first row of open water; everything below it is the sea. */
+export const SHORE_ROW = 34;
+/** The dock: the centre avenue carried on past the south road and out over the water, in tiles. */
+export const DOCK: Rect = { x: CENTRE_X / TILE + 14, y: 32, width: 2, height: 5 };
+/** The ferry's picture. */
+export const BOAT = { width: 192, height: 168 };
 
 export type Entrance = { kind: "lobby"; tenant: Tenant } | { kind: "campus"; campus: string };
 
@@ -158,6 +180,8 @@ export interface Building {
   entrance: Entrance;
   /** Texture key of the picture. */
   art: string;
+  /** The way you walk on coming back out: away from the door. Down, unless said otherwise. */
+  arrive?: "up" | "down";
 }
 
 function placeBuilding(
@@ -238,7 +262,32 @@ export const BUILDINGS: readonly Building[] = [
     ontoCampus("homestar"),
     "world-campus",
   ),
+  // South: the ferry, moored on the east side of the dock's end. Walking
+  // onto the end of the dock boards it, and it sails to the island.
+  ferry(),
 ];
+
+function ferry(): Building {
+  const frame = {
+    x: (DOCK.x + DOCK.width) * TILE,
+    y: SHORE_ROW * TILE - TILE / 2,
+    width: BOAT.width,
+    height: BOAT.height,
+  };
+  return {
+    org: org("apeiron-media"),
+    frame,
+    // A boat in the water: all of it is solid, since the water is too.
+    solid: frame,
+    // The end of the dock, both boards wide, where the gangway comes across.
+    door: { x: DOCK.x * TILE, y: (DOCK.y + 3) * TILE, width: DOCK.width * TILE, height: 2 * TILE },
+    // Back on the dock at the shore, facing up the avenue.
+    outside: { x: DOCK.x * TILE + TILE, y: SHORE_ROW * TILE - TILE / 2 },
+    entrance: ontoCampus("apeiron-media"),
+    art: "world-boat",
+    arrive: "up",
+  };
+}
 
 /** Where a person appears on the world map with no building to step out of: by the fountain. */
 export const WORLD_SPAWN = { x: CENTRE_X + 600, y: 655 };

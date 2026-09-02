@@ -19,32 +19,25 @@ import { frameZoom } from "@/lib/camera";
 import { WORLD_PATH, showAddress } from "@/lib/world/paths";
 import {
   BUILDINGS,
-  TILE,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   buildingFrom,
   spawnFor,
   type Building,
-  type Rect,
 } from "@/lib/world/tenants";
+import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
 import {
-  PROPS,
-  SCENERY,
-  groundTiles,
-  propBody,
-  type PlacedProp,
-  type PropSpec,
-} from "@/lib/world/scenery";
+  BOAT_KEY,
+  addSolid,
+  cutOutdoorFrames,
+  layGround,
+  placeProp,
+  placeSign,
+  preloadOutdoors,
+} from "./outdoors";
 
 const log = createLogger("World");
 
-const GROUND = {
-  grass: "world-grass",
-  paving: "world-paving",
-  kerb: "world-kerb",
-  asphalt: "world-asphalt",
-} as const;
-const PROPS_KEY = "world-props";
 /** Where each building's name goes: the blank sign the picture leaves, from the frame's top. */
 const SIGN_Y: Record<string, number> = {
   "world-castle": 175,
@@ -53,6 +46,7 @@ const SIGN_Y: Record<string, number> = {
   "world-blocks": 169,
   "world-campus": 173,
   "world-lab": 159,
+  [BOAT_KEY]: 136,
 };
 /** A door zone target that starts a scene rather than loading a page. */
 const CAMPUS_TARGET = "campus:";
@@ -94,10 +88,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image(GROUND.grass, "/sprites/world/grass_48.png");
-    this.load.image(GROUND.paving, "/sprites/world/paving_48.png");
-    this.load.image(GROUND.kerb, "/sprites/world/kerb_48.png");
-    this.load.image(GROUND.asphalt, "/sprites/world/asphalt_48.png");
+    preloadOutdoors(this);
     this.load.image("world-pond", "/sprites/world/pond_288x192.png");
     this.load.image("van", "/sprites/world/van_96x144.png");
     this.load.image("world-castle", "/sprites/world/building_castle.png");
@@ -106,8 +97,6 @@ export class WorldScene extends Phaser.Scene {
     this.load.image("world-blocks", "/sprites/world/building_blocks.png");
     this.load.image("world-campus", "/sprites/world/building_campus.png");
     this.load.image("world-lab", "/sprites/world/building_lab.png");
-    this.load.image(PROPS_KEY, "/sprites/world/props.png");
-    this.load.json("world-props-frames", "/sprites/world/props.json");
     // Normally already loaded by the office; guarded for a direct arrival.
     if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, SPRITE_PATH);
   }
@@ -120,25 +109,28 @@ export class WorldScene extends Phaser.Scene {
     // Reached in-page from a lobby: say so in the bar, so a reload comes back here.
     showAddress(WORLD_PATH);
     if (!this.anims.exists("idle-down")) buildSpriteFrames(this, SPRITE_KEY);
-    this.cutFrames();
+    cutOutdoorFrames(this);
 
-    this.layGround();
+    const ground = groundTiles();
+    layGround(this, ground);
     const walls = this.physics.add.staticGroup();
     this.zones = BUILDINGS.map((b) => this.placeBuilding(b, walls));
-    for (const prop of SCENERY) this.placeProp(prop, walls);
-    this.pathfinder = new Pathfinder(
-      WORLD_WIDTH,
-      WORLD_HEIGHT,
-      [...BUILDINGS.map((b) => b.solid), ...SCENERY.map(propBody).filter((r) => r !== null)],
-      PF_PADDING,
-    );
+    for (const prop of SCENERY) placeProp(this, prop, walls);
+    for (const sign of WORLD_SIGNS) placeSign(this, sign, walls);
+    // The buildings and props are already walls of their own; the sea is
+    // solid too, so nobody walks off the dock.
+    const solids = worldSolids();
+    for (const water of solids.slice(BUILDINGS.length + SCENERY.length)) addSolid(walls, water);
+    this.pathfinder = new Pathfinder(WORLD_WIDTH, WORLD_HEIGHT, solids, PF_PADDING);
 
     const at = spawnFor(data?.from);
-    this.player = new Player(this, at.x, at.y, "down");
+    const left = buildingFrom(data?.from);
+    this.player = new Player(this, at.x, at.y, left?.arrive ?? "down");
     // Out of a building's door: a few steps down the path before the keys
     // are yours, so the key held through the door does not walk you back in.
+    // Off the ferry: up the dock, away from the gangway.
     this.arrival.reset();
-    if (buildingFrom(data?.from)) this.arrival.begin("down", 96);
+    if (left) this.arrival.begin(left.arrive ?? "down", 96);
     this.player.sprite.setCollideWorldBounds(true);
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.physics.add.collider(this.player.sprite, walls);
@@ -221,77 +213,19 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  /** Name the rectangles of the props sheet so they can be drawn by name. */
-  private cutFrames() {
-    const props = this.textures.get(PROPS_KEY);
-    const frames = this.cache.json.get("world-props-frames") as Record<string, Rect> | undefined;
-    for (const [name, r] of Object.entries(frames ?? {})) {
-      if (!props.has(name)) props.add(name, 0, r.x, r.y, r.width, r.height);
-    }
-    if (!this.anims.exists("world-fountain")) {
-      this.anims.create({
-        key: "world-fountain",
-        frames: [
-          { key: PROPS_KEY, frame: "fountain" },
-          { key: PROPS_KEY, frame: "fountain2" },
-        ],
-        frameRate: 3,
-        repeat: -1,
-      });
-    }
-  }
-
-  private layGround() {
-    const tiles = groundTiles();
-    tiles.forEach((row, ty) =>
-      row.forEach((ground, tx) => {
-        this.add
-          .image(tx * TILE, ty * TILE, GROUND[ground])
-          .setOrigin(0, 0)
-          .setDepth(0);
-      }),
-    );
-  }
-
-  private placeProp(prop: PlacedProp, walls: Phaser.Physics.Arcade.StaticGroup) {
-    const spec: PropSpec = PROPS[prop.kind];
-    const image = spec.animate
-      ? this.add.sprite(prop.x, prop.y, PROPS_KEY, prop.kind).play("world-fountain")
-      : spec.texture
-        ? this.add.image(prop.x, prop.y, spec.texture)
-        : this.add.image(prop.x, prop.y, PROPS_KEY, prop.kind);
-    // Feet on the ground; whoever's feet are lower stands in front.
-    image.setOrigin(0.5, 1).setDepth(prop.y);
-    const body = propBody(prop);
-    if (body) this.solid(walls, body);
-  }
-
-  private solid(walls: Phaser.Physics.Arcade.StaticGroup, r: Rect) {
-    const wall = walls.create(
-      r.x + r.width / 2,
-      r.y + r.height / 2,
-      undefined,
-      undefined,
-      false,
-    ) as Phaser.Physics.Arcade.Sprite;
-    wall.body!.setSize(r.width, r.height);
-    wall.setVisible(false);
-    (wall.body as Phaser.Physics.Arcade.StaticBody).enable = true;
-  }
-
   private placeBuilding(b: Building, walls: Phaser.Physics.Arcade.StaticGroup): DoorZone {
     const foot = b.frame.y + b.frame.height;
     this.add.image(b.frame.x, b.frame.y, b.art).setOrigin(0, 0).setDepth(foot);
-    this.solid(walls, b.solid);
+    addSolid(walls, b.solid);
 
     // The name, on the sign the picture leaves blank: the same size as a
     // campus building's, so the two maps read alike. The text carries its
     // own strip of the band's colour, so a long name stays readable past
-    // the band's ends.
+    // the band's ends. The ferry's board is small, and so is its lettering.
     this.add
       .text(b.frame.x + b.frame.width / 2, b.frame.y + SIGN_Y[b.art], b.org.name.toUpperCase(), {
         fontFamily: '"Press Start 2P", monospace',
-        fontSize: "18px",
+        fontSize: b.art === BOAT_KEY ? "8px" : "18px",
         color: "#1b1b2a",
         align: "center",
         backgroundColor: "#e0b870",
@@ -337,6 +271,8 @@ export class WorldScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     if (this.leaving) return;
+    // Read the pad every frame, or it never reports anything out here.
+    this.gamepad.poll();
     if (this.arrival.holdsInput) {
       if (this.arrival.walking) {
         this.player.drive(this.arrival.step(delta, MOVE_SPEED));

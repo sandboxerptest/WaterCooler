@@ -47,5 +47,17 @@
     "y": 0,
     "width": 48,
     "height": 96
+  },
+  "sheep": {
+    "x": 752,
+    "y": 0,
+    "width": 48,
+    "height": 40
+  },
+  "board": {
+    "x": 808,
+    "y": 0,
+    "width": 144,
+    "height": 88
   }
 }

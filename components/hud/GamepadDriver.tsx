@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { gameEvents } from "@/lib/events";
 import { HUD_BUTTONS, XBOX } from "@/lib/gamepad/buttons";
+import { talkButton } from "@/lib/gamepad/bindings";
 import { padMonitor } from "@/lib/gamepad/monitor";
 import { PAD_OWN_ATTR, topDialog } from "@/lib/gamepad/dialogs";
 import { confirmFocused, moveFocus } from "@/lib/gamepad/focus";
@@ -11,8 +12,9 @@ import { voiceChat } from "@/lib/voice/voice-chat";
 /**
  * The controller, everywhere that is not a game machine.
  *
- * - Hold the left trigger to talk: the voice comes on as it goes down and
- *   off as it comes up, wherever you are and whatever is open.
+ * - Hold the talk button — the left trigger, unless the person has chosen
+ *   another in the Controller check — and the voice comes on as it goes
+ *   down and off as it comes up, wherever you are and whatever is open.
  * - With a dialog up, the d-pad or stick walks its controls, A presses the
  *   one the ring is on, and B or View closes it. Every dialog in the game
  *   is marked `role="dialog"`, so a new one is covered without registering.
@@ -47,7 +49,7 @@ export default function GamepadDriver() {
     const flyout = () => document.querySelector<HTMLElement>(".hud-topright-flyout");
 
     const unsubscribe = padMonitor.subscribe(({ button, phase }) => {
-      if (button === HUD_BUTTONS.talk) {
+      if (button === talkButton()) {
         if (phase === "down") {
           talking = true;
           void voiceChat.enable();

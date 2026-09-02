@@ -11,7 +11,7 @@
  */
 
 import { TILE, tenantFor, tenantsOf, type BuildingKind, type Rect, type Tenant } from "./tenants";
-import type { PlacedProp } from "./scenery";
+import type { PlacedProp, Sign } from "./scenery";
 
 export type DoorSide = "bottom" | "left" | "right";
 
@@ -41,10 +41,19 @@ export interface Campus {
   /** Paved ground, in tiles. */
   paved: Rect[];
   props: PlacedProp[];
-  /** Walk onto this — the bottom edge, anywhere along it — to go back to the world map. */
+  /** Walk onto this — the bottom edge, anywhere along it, or the end of the dock — to go back to the world map. */
   exit: Rect;
   /** Where you stand on arriving from the world map. */
   entrance: { x: number; y: number };
+  /** Open water, in tiles: this is an island, not a yard. */
+  water?: Rect[];
+  /** Dock planking, in tiles, laid over the water and walked like paving. */
+  dock?: Rect[];
+  /** The ferry's picture, top left in pixels. Solid; the way out is the dock's end beside it. */
+  boat?: { x: number; y: number };
+  signs?: Sign[];
+  /** What the place is called after the organisation's name: "Campus" unless said otherwise. */
+  place?: string;
 }
 
 /** How many tiles square a building is: drawn at 2x on a yard that fills the screen. */
@@ -143,6 +152,57 @@ function layout(
 
 const lamps = (xs: number[], y: number): PlacedProp[] => xs.map((x) => ({ kind: "lamp", x, y }));
 
+/**
+ * Apeiron Media's island: the same frame as a campus, but sea on every
+ * side. The ferry from the world map's dock ties up at a dock on the south
+ * shore, under a board that says where you are; a path runs up the middle
+ * to the one house, with sheep on the grass either side. The way back is
+ * the end of the dock, where the ferry waits.
+ */
+function island(): Campus {
+  const columns = 20;
+  const rows = 19;
+  const house = building({ tenant: "apeiron-media", tx: 7, ty: 3, art: "site-irish-2x" });
+  return {
+    slug: "apeiron-media",
+    columns,
+    rows,
+    buildings: [house],
+    // From the door down to the head of the dock.
+    paved: [{ x: 10, y: 9, width: 1, height: 5 }],
+    water: [
+      { x: 0, y: 0, width: columns, height: 3 },
+      { x: 0, y: 16, width: columns, height: 3 },
+      { x: 0, y: 3, width: 2, height: 13 },
+      { x: columns - 2, y: 3, width: 2, height: 13 },
+    ],
+    dock: [{ x: 9, y: 14, width: 2, height: 4 }],
+    boat: { x: 11 * TILE, y: 15 * TILE + TILE / 2 },
+    signs: [{ text: "WELCOME TO\nIRELAND", x: 7 * TILE + 34, y: 14 * TILE + 44 }],
+    props: [
+      { kind: "tree", x: 150, y: 270 },
+      { kind: "tree", x: 830, y: 300 },
+      { kind: "tree", x: 140, y: 620 },
+      { kind: "tree", x: 850, y: 600 },
+      { kind: "tree", x: 250, y: 720 },
+      { kind: "tree", x: 700, y: 740 },
+      { kind: "bush", x: 240, y: 380 },
+      { kind: "bush", x: 720, y: 380 },
+      { kind: "bush", x: 160, y: 470 },
+      { kind: "bush", x: 830, y: 470 },
+      { kind: "sheep", x: 200, y: 540 },
+      { kind: "sheep", x: 270, y: 580 },
+      { kind: "sheep", x: 760, y: 520 },
+      { kind: "sheep", x: 640, y: 690 },
+      { kind: "sheep", x: 330, y: 660 },
+      ...lamps([440, 568], 600),
+    ],
+    exit: { x: 9 * TILE, y: 16 * TILE, width: 2 * TILE, height: 2 * TILE },
+    entrance: { x: 10 * TILE, y: 15 * TILE + 20 },
+    place: "Ireland",
+  };
+}
+
 export const CAMPUSES: Record<string, Campus> = {
   // The departments across the top, each its own kind of building; the
   // store and the garage along the bottom, entered from the road side.
@@ -163,6 +223,7 @@ export const CAMPUSES: Record<string, Campus> = {
     [],
     7,
   ),
+  "apeiron-media": island(),
 };
 
 export function campusFor(slug: string | null | undefined): Campus | null {

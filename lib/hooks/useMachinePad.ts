@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { XBOX, machineAction } from "@/lib/gamepad/buttons";
+import { talkButton } from "@/lib/gamepad/bindings";
 import { padMonitor } from "@/lib/gamepad/monitor";
 import { confirmFocused, moveFocus } from "@/lib/gamepad/focus";
 
@@ -52,6 +53,9 @@ export function useMachinePad(open: boolean, handlers: MachinePadHandlers) {
     return padMonitor.subscribe((event) => {
       const h = current.current;
       const menu = h.menuActive ? (h.menu?.current ?? null) : null;
+
+      // The talk button is the HUD driver's, wherever it has been put.
+      if (event.button === talkButton()) return;
 
       if (event.phase === "up") {
         if (event.button === XBOX.A && menu) confirmFocused(menu, "up");

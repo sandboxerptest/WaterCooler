@@ -1,13 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { PAVED, SCENERY, everyDoorReachable, groundTiles, propBody, propBounds } from "./scenery";
+import {
+  DOCKS,
+  PAVED,
+  SCENERY,
+  WORLD_SIGNS,
+  everyDoorReachable,
+  groundTiles,
+  propBody,
+  propBounds,
+  signBody,
+  worldWater,
+} from "./scenery";
 import {
   BUILDINGS,
+  DOCK,
+  SHORE_ROW,
   TILE,
   WORLD_COLUMNS,
   WORLD_HEIGHT,
   WORLD_ROWS,
   WORLD_SPAWN,
   WORLD_WIDTH,
+  buildingFrom,
 } from "./tenants";
 
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
@@ -43,6 +57,11 @@ describe("ground", () => {
       const col = Math.floor((b.door.x + b.door.width / 2) / TILE);
       // The door zone straddles the building's last row and the path's first.
       const from = Math.floor((b.door.y + b.door.height - 1) / TILE);
+      if (b.art === "world-boat") {
+        // The ferry is boarded from the dock, not a path.
+        expect(tiles[from][col]).toBe("dock");
+        continue;
+      }
       expect(tiles[from][col], `${b.org.slug} door`).toBe("paving");
       for (let y = from; y < 18; y++) expect(tiles[y][col]).not.toBe("grass");
     }
@@ -84,7 +103,7 @@ describe("props", () => {
   });
 
   it("stay off the walkways, apart from the benches and the fountain", () => {
-    const paving = PAVED.map((r) => ({
+    const paving = [...PAVED, ...DOCKS].map((r) => ({
       x: r.x * TILE,
       y: r.y * TILE,
       width: r.width * TILE,
@@ -112,5 +131,69 @@ describe("props", () => {
 
   it("leave every door reachable from the spawn", () => {
     expect(everyDoorReachable()).toBe(true);
+  });
+});
+
+describe("the shore", () => {
+  const tiles = groundTiles();
+  const ferry = buildingFrom("apeiron-media")!;
+
+  it("is sea from the shore row down, except for the dock", () => {
+    for (let y = SHORE_ROW; y < WORLD_ROWS; y++)
+      for (let x = 0; x < WORLD_COLUMNS; x++) {
+        const onDock = x >= DOCK.x && x < DOCK.x + DOCK.width && y < DOCK.y + DOCK.height;
+        expect(tiles[y][x], `${x},${y}`).toBe(onDock ? "dock" : "water");
+      }
+    for (let x = 0; x < WORLD_COLUMNS; x++) expect(tiles[SHORE_ROW - 1][x]).not.toBe("water");
+  });
+
+  it("runs the dock from the south road out over the water", () => {
+    expect(tiles[DOCK.y - 1][DOCK.x]).toBe("paving");
+    for (let y = DOCK.y; y < DOCK.y + DOCK.height; y++)
+      for (let x = DOCK.x; x < DOCK.x + DOCK.width; x++) expect(tiles[y][x]).toBe("dock");
+  });
+
+  it("moors the ferry beside the end of the dock, boarded from the dock", () => {
+    expect(ferry.art).toBe("world-boat");
+    expect(ferry.frame.x).toBe((DOCK.x + DOCK.width) * TILE);
+    expect(ferry.entrance).toEqual({ kind: "campus", campus: "apeiron-media" });
+    const doorCol = Math.floor((ferry.door.x + ferry.door.width / 2) / TILE);
+    const doorRow = Math.floor((ferry.door.y + ferry.door.height - 1) / TILE);
+    expect(tiles[doorRow][doorCol]).toBe("dock");
+    expect(ferry.arrive).toBe("up");
+    // Back on the dock at the shore, out of the boarding zone.
+    expect(
+      overlaps({ x: ferry.outside.x, y: ferry.outside.y, width: 1, height: 1 }, ferry.door),
+    ).toBe(false);
+  });
+
+  it("keeps the sea solid everywhere but the dock", () => {
+    const water = worldWater();
+    expect(water.length).toBeGreaterThan(0);
+    for (const body of water) {
+      for (const dock of DOCKS)
+        expect(
+          overlaps(body, {
+            x: dock.x * TILE,
+            y: dock.y * TILE,
+            width: dock.width * TILE,
+            height: dock.height * TILE,
+          }),
+        ).toBe(false);
+    }
+  });
+
+  it("puts the board at the head of the dock, clear of the planks", () => {
+    expect(WORLD_SIGNS.some((s) => /IRELAND/.test(s.text))).toBe(true);
+    for (const sign of WORLD_SIGNS)
+      for (const dock of DOCKS)
+        expect(
+          overlaps(signBody(sign), {
+            x: dock.x * TILE,
+            y: dock.y * TILE,
+            width: dock.width * TILE,
+            height: dock.height * TILE,
+          }),
+        ).toBe(false);
   });
 });

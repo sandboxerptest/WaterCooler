@@ -240,6 +240,15 @@ room's activity like a pinball one. Keys, a pad or a touch screen all work;
 Escape (or B) backs out of a game to the menu, and out of the menu to the
 room.
 
+### The island across the water
+
+The bottom of the world map is the sea. The centre avenue carries on past
+the south road as a dock, and the ferry waits at its end; walk to the end of
+the dock to board it. It sails to an island, with water all round, a dock
+under a board that says "Welcome to Ireland", sheep on the grass, and one
+whitewashed house: Apeiron Media, laid out inside like Castle Atlantic,
+ping pong table and all. Walk back onto the end of the dock to sail home.
+
 ### Playing with a controller
 
 Plug in an Xbox controller (a PlayStation or Switch pad works the same; the
@@ -261,10 +270,16 @@ The game machines all use the same buttons, printed on each one:
 | Y      | music on or off                                                             |
 | View   | close the machine from anywhere                                             |
 | Menu   | play again, or a new deal                                                   |
-| LT     | hold to talk                                                                |
+| LT     | hold to talk, or the button you pick in the Controller check                |
 
 Pinball flips with the bumpers or the d-pad; ping pong moves the bat with
 the stick or the d-pad.
+
+The controller pill in the bottom bar reads "no pad" until the browser
+reports one, and opens the Controller check: what the browser sees, the
+last button pressed by name, and a way to choose a different talk button,
+since some pads report a bumper at the trigger's index. Browsers hide a
+controller until the page has been clicked and a button pressed.
 
 ### Files with a task
 

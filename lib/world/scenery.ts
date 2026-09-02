@@ -12,9 +12,12 @@
  */
 
 import {
+  BOAT,
   BUILDINGS,
   CENTRE_X,
+  DOCK,
   EAST_X,
+  SHORE_ROW,
   TILE,
   WORLD_COLUMNS,
   WORLD_HEIGHT,
@@ -24,7 +27,7 @@ import {
   type Rect,
 } from "./tenants";
 
-export type Ground = "grass" | "paving" | "kerb" | "asphalt";
+export type Ground = "grass" | "paving" | "kerb" | "asphalt" | "water" | "dock";
 
 const CENTRE = CENTRE_X / TILE;
 
@@ -45,7 +48,8 @@ export const PAVED: readonly Rect[] = [
   { x: 0, y: NORTH_ROAD, width: WORLD_COLUMNS, height: 2 }, // the north road, the whole way
   { x: 0, y: SOUTH_ROAD, width: WORLD_COLUMNS, height: 2 }, // the south road, the same
   { x: CENTRE + 11, y: 9, width: 8, height: 7 }, // plaza
-  ...BUILDINGS.map(pathDown),
+  // A path to each door; the ferry has the dock instead.
+  ...BUILDINGS.filter((b) => b.frame.y < SOUTH_ROAD * TILE).map(pathDown),
   // Three avenues join the two roads: west, centre and east.
   { x: 8, y: NORTH_ROAD + 2, width: 2, height: SOUTH_ROAD - NORTH_ROAD - 2 },
   { x: CENTRE + 14, y: NORTH_ROAD + 2, width: 2, height: SOUTH_ROAD - NORTH_ROAD - 2 },
@@ -54,6 +58,26 @@ export const PAVED: readonly Rect[] = [
 
 /** Asphalt, in tiles: the car park by the campus, off the east avenue. */
 export const ASPHALT: readonly Rect[] = [{ x: CENTRE + 30 + 9, y: 22, width: 6, height: 5 }];
+
+/** The sea, in tiles: the whole bottom of the map, past the bushes on the shore. */
+export const WATER: readonly Rect[] = [
+  { x: 0, y: SHORE_ROW, width: WORLD_COLUMNS, height: WORLD_ROWS - SHORE_ROW },
+];
+
+/** Dock planking, in tiles. Laid over the water, and walkable. */
+export const DOCKS: readonly Rect[] = [DOCK];
+
+/** A board with words on it, standing on its feet like a prop. */
+export interface Sign {
+  text: string;
+  x: number;
+  y: number;
+}
+
+/** The board at the head of the dock. */
+export const WORLD_SIGNS: readonly Sign[] = [
+  { text: "FERRY TO\nIRELAND", x: DOCK.x * TILE - 60, y: (SHORE_ROW - 1) * TILE + 44 },
+];
 
 const inRect = (r: Rect, x: number, y: number) =>
   x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
@@ -69,7 +93,8 @@ export const tilesOf = (r: Rect): Rect => ({
 /**
  * The ground tile at every cell. Paving gets a kerb along any edge that
  * meets grass above it — but not where it meets a building, since a path
- * runs straight up to the door.
+ * runs straight up to the door. Dock planking lies over the water, so it
+ * is decided first.
  */
 export function groundGrid(
   columns: number,
@@ -77,13 +102,17 @@ export function groundGrid(
   paved: readonly Rect[],
   built: readonly Rect[],
   asphalt: readonly Rect[] = [],
+  water: readonly Rect[] = [],
+  dock: readonly Rect[] = [],
 ): Ground[][] {
   const isPaved = (x: number, y: number) => paved.some((r) => inRect(r, x, y));
   const grid: Ground[][] = [];
   for (let y = 0; y < rows; y++) {
     const row: Ground[] = [];
     for (let x = 0; x < columns; x++) {
-      if (asphalt.some((r) => inRect(r, x, y))) row.push("asphalt");
+      if (dock.some((r) => inRect(r, x, y))) row.push("dock");
+      else if (water.some((r) => inRect(r, x, y))) row.push("water");
+      else if (asphalt.some((r) => inRect(r, x, y))) row.push("asphalt");
       else if (!isPaved(x, y)) row.push("grass");
       else if (y > 0 && !isPaved(x, y - 1) && !built.some((b) => inRect(b, x, y - 1)))
         row.push("kerb");
@@ -101,7 +130,43 @@ export function groundTiles(): Ground[][] {
     PAVED,
     BUILDINGS.map((b) => tilesOf(b.frame)),
     ASPHALT,
+    WATER,
+    DOCKS,
   );
+}
+
+/**
+ * The water as solids, in pixels: one body per run of water tiles along a
+ * row, with the dock left out so it can be walked. Nobody walks on the
+ * sea, and a walk that is planned around it stays dry.
+ */
+export function waterBodies(grid: Ground[][]): Rect[] {
+  const bodies: Rect[] = [];
+  grid.forEach((row, y) => {
+    let start = -1;
+    const flush = (end: number) => {
+      if (start >= 0)
+        bodies.push({ x: start * TILE, y: y * TILE, width: (end - start) * TILE, height: TILE });
+      start = -1;
+    };
+    row.forEach((ground, x) => {
+      if (ground === "water") {
+        if (start < 0) start = x;
+      } else flush(x);
+    });
+    flush(row.length);
+  });
+  return bodies;
+}
+
+/** The world's water, as solids. */
+export function worldWater(): Rect[] {
+  return waterBodies(groundTiles());
+}
+
+/** A sign's board stands on the ground like a prop, and is as solid at the foot. */
+export function signBody(sign: Sign): Rect {
+  return propBody({ kind: "board", x: sign.x, y: sign.y })!;
 }
 
 // ── Props ──────────────────────────────────────────────
@@ -132,6 +197,8 @@ export const PROPS = {
   signpost: { width: 48, height: 96, footprint: { width: 12, height: 10 } },
   pond: { texture: "world-pond", width: 288, height: 192, footprint: { width: 268, height: 140 } },
   van: { texture: "van", width: 96, height: 144, footprint: { width: 88, height: 130 } },
+  sheep: { width: 48, height: 40, footprint: { width: 30, height: 10 } },
+  board: { width: 144, height: 88, footprint: { width: 112, height: 10 } },
 } as const satisfies Record<string, PropSpec>;
 
 export type PropKind = keyof typeof PROPS;
@@ -163,8 +230,10 @@ export const SCENERY: readonly PlacedProp[] = [
     118,
     along(60, WORLD_WIDTH - 60, 140).filter((x) => x < 150 || x > 520),
   ),
-  // Bushes along the very bottom, the whole way.
-  ...along(80, WORLD_WIDTH - 60, 220).map((x): PlacedProp => ({ kind: "bush", x, y: 1620 })),
+  // Bushes along the shore, the whole way — except at the dock and the ferry.
+  ...along(80, WORLD_WIDTH - 60, 220)
+    .filter((x) => x < DOCK.x * TILE - 140 || x > (DOCK.x + DOCK.width) * TILE + BOAT.width + 60)
+    .map((x): PlacedProp => ({ kind: "bush", x, y: SHORE_ROW * TILE - 12 })),
 
   // West: the two stores, each with lamps and flowers at the door.
   { kind: "tree", x: 700, y: 250 },
@@ -310,14 +379,21 @@ export function allReachable(
   return targets.every((t) => seen.has(key(Math.floor(t.x / cell), Math.floor(t.y / cell))));
 }
 
+/** Everything solid on the world map: the buildings, the props' feet, the signs and the sea. */
+export function worldSolids(): Rect[] {
+  return [
+    ...BUILDINGS.map((b) => b.solid),
+    ...SCENERY.map(propBody).filter((r): r is Rect => r !== null),
+    ...WORLD_SIGNS.map(signBody),
+    ...worldWater(),
+  ];
+}
+
 /** Whether every building's door on the world map can be reached from the spawn. */
 export function everyDoorReachable(cell = 24): boolean {
   return allReachable(
     { width: WORLD_WIDTH, height: WORLD_HEIGHT },
-    [
-      ...BUILDINGS.map((b) => b.solid),
-      ...SCENERY.map(propBody).filter((r): r is Rect => r !== null),
-    ],
+    worldSolids(),
     WORLD_SPAWN,
     BUILDINGS.map((b) => ({ x: b.door.x + b.door.width / 2, y: b.door.y })),
     cell,

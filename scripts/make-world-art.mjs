@@ -209,7 +209,7 @@ function pond() {
 }
 
 // ── Props: one sheet, each prop in a named rectangle ──
-const props = canvas(768, 128);
+const props = canvas(1024, 128);
 const frames = {};
 let cursor = 0;
 function slot(name, w, h, draw) {
@@ -348,7 +348,287 @@ slot("signpost", 48, 96, (set, d) => {
   d.rect(10, 16, 38, 18, P.ink2);
   d.rect(10, 22, 30, 24, P.ink2);
 });
+slot("sheep", 48, 40, (set, d) => {
+  d.ellipse(24, 37, 14, 3, P.shadow);
+  // legs
+  for (const lx of [12, 19, 29, 36]) d.rect(lx, 26, lx + 3, 36, P.ink2);
+  // the fleece: a cloud of white
+  d.ellipse(24, 20, 17, 11, P.ink);
+  d.ellipse(24, 20, 15, 9, P.slabLit);
+  d.ellipse(16, 16, 7, 5, [250, 250, 250, 255]);
+  d.ellipse(30, 14, 6, 5, [250, 250, 250, 255]);
+  // the head, looking left, with an ear and an eye
+  d.ellipse(8, 20, 7, 5, P.ink);
+  d.ellipse(8, 20, 6, 4, P.ink2);
+  d.rect(4, 14, 8, 17, P.ink2);
+  set(5, 19, [250, 250, 250, 255]);
+  set(6, 19, [250, 250, 250, 255]);
+});
+slot("board", 144, 88, (set, d) => {
+  d.ellipse(72, 84, 60, 4, P.shadow);
+  for (const px of [18, 120]) {
+    d.rect(px, 36, px + 6, 82, P.woodDark);
+    d.rect(px + 1, 36, px + 3, 82, P.wood);
+    d.outline(px - 1, 36, px + 7, 83);
+  }
+  d.rect(6, 8, 138, 52, P.woodLit);
+  d.rect(6, 8, 138, 12, [240, 232, 210, 255]);
+  d.rect(6, 48, 138, 52, P.wood);
+  d.outline(5, 7, 139, 53);
+  d.outline(9, 11, 135, 49, P.wood);
+  // nail heads
+  for (const [nx, ny] of [
+    [11, 13],
+    [132, 13],
+    [11, 46],
+    [132, 46],
+  ])
+    set(nx, ny, P.ink2);
+});
 frames.fountain.animateWith = "fountain2";
+
+/** Open water: two frames, the glints shifting between them so it moves. */
+function water(frame) {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, P.waterDark);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) if (hash(x + 7, y + 3) < 0.05) c.set(x, y, [66, 140, 214, 255]);
+  // glints: short dashes, each tile the same so the sea tiles seamlessly
+  for (const [gx, gy, len, lit] of [
+    [4, 6, 12, false],
+    [28, 10, 10, true],
+    [14, 22, 14, true],
+    [36, 26, 8, false],
+    [6, 38, 10, true],
+    [26, 42, 12, false],
+  ]) {
+    const x0 = (gx + frame * 4) % 48;
+    for (let i = 0; i < len; i++) c.set((x0 + i) % 48, gy, lit ? P.waterLit : P.water);
+    c.set((x0 + len) % 48, gy + 1, P.water);
+  }
+  return c;
+}
+/** Foam along the top edge, laid over a water tile where it meets land; turned for the other sides. */
+function foam() {
+  const c = canvas(48, 48);
+  for (let x = 0; x < 48; x++) {
+    c.set(x, 0, [236, 244, 248, 230]);
+    c.set(x, 1, hash(x, 1) < 0.7 ? [236, 244, 248, 200] : [204, 230, 236, 160]);
+    if (hash(x, 2) < 0.45) c.set(x, 2, [204, 230, 236, 150]);
+    if (hash(x, 3) < 0.2) c.set(x, 3, [204, 230, 236, 110]);
+  }
+  return c;
+}
+/** Dock planking: boards across the walk, a darker gap between each. */
+function dock() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, P.woodDark);
+  for (let y = 0; y < 48; y += 12) {
+    c.rect(0, y + 1, 48, y + 11, P.wood);
+    c.rect(0, y + 1, 48, y + 2, P.woodLit);
+    for (let x = 0; x < 48; x++) if (hash(x, y) < 0.08) c.set(x, y + 4 + (x % 5), P.woodDark);
+  }
+  // the beams along both edges
+  c.rect(0, 0, 3, 48, P.woodDark);
+  c.rect(45, 0, 48, 48, P.woodDark);
+  c.rect(0, 0, 1, 48, P.ink2);
+  c.rect(47, 0, 48, 48, P.ink2);
+  return c;
+}
+/**
+ * The ferry, moored bow-up beside the dock with a gangway out to the left:
+ * a white hull with a teal band, a cabin amidships, a stack, a life ring,
+ * and a name board along the near side left blank for the scene.
+ */
+function boat() {
+  const BW = 192,
+    BH = 168;
+  const c = canvas(BW, BH);
+  const white = [235, 228, 242, 255];
+  const whiteDark = [204, 194, 216, 255];
+  c.ellipse(104, 156, 66, 8, P.shadow);
+  // the hull: pointed at the bow, square at the stern
+  for (let y = 12; y < 44; y++) {
+    const half = Math.round(((y - 12) / 32) * 44) + 4;
+    c.rect(104 - half, y, 104 + half, y + 1, P.ink);
+  }
+  c.rect(56, 44, 152, 148, P.ink);
+  for (let y = 14; y < 44; y++) {
+    const half = Math.round(((y - 14) / 30) * 44) + 3;
+    c.rect(104 - half, y, 104 + half, y + 1, white);
+  }
+  c.rect(58, 44, 150, 146, white);
+  c.rect(58, 128, 150, 146, whiteDark);
+  c.rect(58, 108, 150, 116, P.teal);
+  c.rect(58, 116, 150, 118, P.tealDark);
+  // the deck, planked
+  c.rect(66, 34, 142, 104, P.woodLit);
+  for (let y = 36; y < 104; y += 8) c.rect(66, y, 142, y + 1, P.wood);
+  c.outline(65, 33, 143, 105, P.wood);
+  // the bow deck narrows with the hull
+  for (let y = 22; y < 34; y++) {
+    const half = Math.round(((y - 14) / 30) * 44) - 6;
+    if (half > 2) c.rect(104 - half, y, 104 + half, y + 1, P.woodLit);
+  }
+  // the cabin, with windows all round and a teal roof
+  c.rect(80, 50, 128, 96, P.ink);
+  c.rect(82, 52, 126, 94, whiteDark);
+  c.rect(82, 52, 126, 60, P.teal);
+  c.rect(82, 52, 126, 54, [66, 150, 144, 255]);
+  for (const wx of [86, 100, 114]) {
+    c.rect(wx, 64, wx + 10, 76, P.ink);
+    c.rect(wx + 1, 65, wx + 9, 75, P.glass);
+    c.rect(wx + 1, 65, wx + 4, 69, P.glassLit);
+  }
+  c.rect(98, 80, 110, 94, P.ink);
+  c.rect(100, 82, 108, 94, [64, 52, 46, 255]);
+  // the stack, with a puff of smoke
+  c.rect(114, 32, 124, 52, P.ink);
+  c.rect(116, 34, 122, 50, P.red);
+  c.rect(116, 34, 122, 37, P.ink2);
+  c.disc(119, 26, 5, [216, 208, 224, 200]);
+  c.disc(124, 19, 4, [216, 208, 224, 150]);
+  // the life ring on the stern rail
+  c.ring(140, 122, 7, P.ink);
+  c.ring(140, 122, 6, P.red);
+  c.ring(140, 122, 4, white);
+  c.set(140, 116, white);
+  c.set(140, 128, white);
+  c.set(134, 122, white);
+  c.set(146, 122, white);
+  // the gangway to the dock on the left, with a rope rail
+  c.rect(4, 100, 60, 108, P.wood);
+  c.rect(4, 100, 60, 102, P.woodLit);
+  c.outline(3, 99, 61, 109);
+  for (let x = 6; x < 58; x += 6) c.rect(x, 104, x + 1, 106, P.woodDark);
+  c.rect(6, 92, 58, 93, P.yellowDark);
+  for (const px of [8, 32, 56]) c.rect(px - 1, 90, px + 1, 100, P.ink2);
+  // fenders along the dock side
+  for (const fy of [56, 76, 96]) {
+    c.rect(52, fy, 58, fy + 10, P.ink);
+    c.rect(53, fy + 1, 57, fy + 9, P.ink2);
+  }
+  // the name board along the near side: left blank for the scene
+  c.rect(64, 128, 144, 144, P.yellow);
+  c.rect(64, 128, 144, 131, P.slabLit);
+  c.outline(63, 127, 145, 145);
+  // waterline ripple
+  for (let x = 40; x < 170; x += 9) c.rect(x, 150, x + 5, 151, P.waterLit);
+  return c;
+}
+/**
+ * Apeiron Media's house on the island: whitewashed walls on a stone footing,
+ * a thatched roof with a chimney, green door and trim, flower boxes under
+ * the windows, a shamrock over the door and the tricolour on a pole.
+ */
+function siteIrish() {
+  return site((c) => {
+    const white = [246, 242, 236, 255];
+    const whiteDark = [214, 206, 200, 255];
+    const thatch = [204, 170, 96, 255];
+    const thatchDark = [166, 132, 70, 255];
+    const thatchLit = [226, 198, 128, 255];
+    const green = [46, 139, 87, 255];
+    const greenDark = [30, 100, 62, 255];
+    const orange = [255, 136, 62, 255];
+    // stone footing
+    c.rect(14, 104, 130, 128, P.stone);
+    for (let y = 106; y < 128; y += 8)
+      for (let x = 14 + ((y / 8) % 2) * 8; x < 130; x += 16) {
+        c.rect(x + 1, y, x + 15, y + 6, P.stoneDark);
+        c.rect(x + 1, y, x + 15, y + 1, [190, 176, 175, 255]);
+      }
+    // whitewashed wall
+    c.rect(14, 46, 130, 106, white);
+    for (let y = 50; y < 104; y += 9) c.rect(14, y, 130, y + 1, whiteDark);
+    // green trim under the eaves
+    c.rect(14, 46, 130, 50, green);
+    c.rect(14, 50, 130, 51, greenDark);
+    // thatched roof, overhanging, with the strands drawn
+    for (let i = 0; i < 26; i++) {
+      const x0 = 10 + Math.round(i * 0.35);
+      const x1 = 134 - Math.round(i * 0.35);
+      c.rect(x0, 20 + i, x1, 21 + i, i % 4 === 0 ? thatchDark : i % 4 === 2 ? thatchLit : thatch);
+    }
+    for (let x = 12; x < 132; x += 5)
+      for (let y = 22; y < 44; y += 7)
+        c.rect(x + ((y / 7) % 2), y, x + 1 + ((y / 7) % 2), y + 4, thatchDark);
+    c.rect(8, 44, 136, 48, thatchDark);
+    c.outline(8, 44, 136, 49);
+    // the ridge, tied down
+    c.rect(18, 18, 126, 21, thatchDark);
+    c.outline(17, 17, 127, 22);
+    // chimney with smoke
+    c.rect(108, 4, 120, 26, P.stone);
+    c.rect(108, 4, 120, 7, P.stoneDark);
+    c.outline(107, 3, 121, 27);
+    c.disc(116, 0, 3, [216, 208, 224, 160]);
+    // sign band across the wall, blank for the scene
+    c.rect(26, 56, 118, 72, P.yellow);
+    c.rect(26, 56, 118, 59, P.slabLit);
+    c.outline(25, 55, 119, 73);
+    // windows with green frames and flower boxes
+    for (const wx of [24, 98]) {
+      c.rect(wx, 80, wx + 22, 102, greenDark);
+      c.rect(wx + 2, 82, wx + 20, 100, P.glass);
+      c.rect(wx + 2, 82, wx + 8, 88, P.glassLit);
+      c.rect(wx + 10, 82, wx + 12, 100, greenDark);
+      c.rect(wx + 2, 90, wx + 20, 92, greenDark);
+      c.rect(wx - 2, 102, wx + 24, 108, P.woodDark);
+      c.rect(wx - 2, 102, wx + 24, 104, P.wood);
+      c.outline(wx - 3, 101, wx + 25, 109);
+      for (const [fx, col] of [
+        [wx + 1, P.red],
+        [wx + 7, P.yellow],
+        [wx + 13, orange],
+        [wx + 19, P.red],
+      ]) {
+        c.rect(fx, 98, fx + 3, 101, col);
+        c.rect(fx - 1, 100, fx + 4, 102, greenDark);
+      }
+    }
+    // the green door, arched, with a brass knob and a fanlight
+    c.disc(72, 92, 14, P.ink);
+    c.rect(58, 92, 86, 128, P.ink);
+    c.disc(72, 92, 12, green);
+    c.rect(60, 92, 84, 128, green);
+    c.rect(60, 92, 84, 94, greenDark);
+    c.rect(71, 92, 73, 128, greenDark);
+    c.disc(72, 88, 8, P.ink);
+    c.disc(72, 88, 6, P.glass);
+    c.rect(66, 88, 78, 90, P.ink);
+    c.rect(66, 96, 70, 112, greenDark);
+    c.rect(74, 96, 78, 112, greenDark);
+    c.rect(66, 116, 70, 126, greenDark);
+    c.rect(74, 116, 78, 126, greenDark);
+    c.set(76, 110, P.yellow);
+    c.set(77, 110, P.yellow);
+    c.rect(54, 128, 90, 134, P.slab);
+    c.rect(54, 128, 90, 130, P.slabLit);
+    c.outline(54, 127, 90, 135);
+    // shamrock over the door
+    for (const [sx, sy] of [
+      [68, 78],
+      [76, 78],
+      [72, 74],
+    ]) {
+      c.disc(sx, sy, 3, greenDark);
+      c.disc(sx, sy, 2, green);
+    }
+    c.rect(71, 78, 73, 84, greenDark);
+    // the tricolour on a pole at the corner
+    c.rect(136, 4, 139, 60, P.ink2);
+    c.rect(139, 6, 143, 18, green);
+    c.rect(143, 6, 144, 18, white);
+    c.rect(133, 6, 136, 18, orange);
+    c.rect(133, 6, 139, 18, [0, 0, 0, 0]);
+    c.rect(139, 6, 144, 10, green);
+    c.rect(139, 10, 144, 14, white);
+    c.rect(139, 14, 144, 18, orange);
+    c.outline(138, 5, 144, 19);
+    c.outline(14, 46, 130, 129);
+  });
+}
 
 // ── Buildings ──
 const W = 288,
@@ -1056,3 +1336,10 @@ save("site_store_2x.png", doubled(siteStore()));
 save("site_garage_2x.png", doubled(siteGarage()));
 save("site_warehouse_2x.png", doubled(siteWarehouse()));
 save("building_lab.png", lab());
+save("water_48.png", water(0));
+save("water2_48.png", water(1));
+save("foam_48.png", foam());
+save("dock_48.png", dock());
+save("boat_192x168.png", boat());
+save("site_irish.png", siteIrish());
+save("site_irish_2x.png", doubled(siteIrish()));
