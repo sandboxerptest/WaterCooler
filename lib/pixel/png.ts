@@ -4,7 +4,9 @@
  * There is no image library in this project and the one thing that must be
  * decoded — a LimeZu character sheet — is always the same shape: 8-bit RGBA,
  * non-interlaced. So rather than pull in a dependency that can read every PNG
- * ever written, this reads the one kind we ship and refuses the rest loudly.
+ * ever written, this reads the kinds we meet and refuses the rest loudly:
+ * 8-bit greyscale, RGB, greyscale+alpha and RGBA, all decoded to RGBA. (An
+ * exported sprite sheet is often RGB with no alpha channel at all.)
  *
  * Note what is *not* decoded here: the picture a person uploads. That is
  * passed to the vision model as base64 and never opened locally, which is why
@@ -61,9 +63,10 @@ export function decodePng(file: Buffer): Bitmap {
   const colourType = file[25];
   const interlace = file[28];
 
-  if (bitDepth !== 8 || colourType !== 6) {
+  const channels = CHANNELS[colourType];
+  if (bitDepth !== 8 || !channels) {
     throw new Error(
-      `Unsupported PNG: expected 8-bit RGBA (depth 8, colour type 6), got depth ${bitDepth}, colour type ${colourType}`,
+      `Unsupported PNG: expected 8-bit greyscale, RGB or RGBA (colour type 0, 2, 4 or 6), got depth ${bitDepth}, colour type ${colourType}`,
     );
   }
   if (interlace !== 0) throw new Error("Unsupported PNG: interlaced");
@@ -80,7 +83,7 @@ export function decodePng(file: Buffer): Bitmap {
   if (idat.length === 0) throw new Error("PNG has no image data");
 
   const raw = inflateSync(Buffer.concat(idat));
-  const stride = width * BYTES_PER_PIXEL;
+  const stride = width * channels;
   const data = new Uint8Array(height * stride);
 
   // Un-filter in place, one scanline at a time. Each line's filter byte says
@@ -93,9 +96,9 @@ export function decodePng(file: Buffer): Bitmap {
 
     for (let x = 0; x < stride; x++) {
       const value = raw[src + x];
-      const left = x >= BYTES_PER_PIXEL ? data[dst + x - BYTES_PER_PIXEL] : 0;
+      const left = x >= channels ? data[dst + x - channels] : 0;
       const above = y > 0 ? data[up + x] : 0;
-      const upLeft = y > 0 && x >= BYTES_PER_PIXEL ? data[up + x - BYTES_PER_PIXEL] : 0;
+      const upLeft = y > 0 && x >= channels ? data[up + x - channels] : 0;
 
       let out: number;
       switch (filter) {
@@ -121,7 +124,30 @@ export function decodePng(file: Buffer): Bitmap {
     }
   }
 
-  return { width, height, data };
+  return { width, height, data: channels === BYTES_PER_PIXEL ? data : toRgba(data, channels) };
+}
+
+/** How many bytes each pixel has, by PNG colour type, for the 8-bit types we read. */
+const CHANNELS: Record<number, number | undefined> = { 0: 1, 2: 3, 4: 2, 6: 4 };
+
+/** Widen greyscale, RGB or greyscale+alpha samples to RGBA. */
+function toRgba(samples: Uint8Array, channels: number): Uint8Array {
+  const pixels = samples.length / channels;
+  const out = new Uint8Array(pixels * BYTES_PER_PIXEL);
+  for (let i = 0; i < pixels; i++) {
+    const s = i * channels;
+    const d = i * BYTES_PER_PIXEL;
+    if (channels === 3) {
+      out[d] = samples[s];
+      out[d + 1] = samples[s + 1];
+      out[d + 2] = samples[s + 2];
+      out[d + 3] = 255;
+    } else {
+      out[d] = out[d + 1] = out[d + 2] = samples[s];
+      out[d + 3] = channels === 2 ? samples[s + 1] : 255;
+    }
+  }
+  return out;
 }
 
 function chunk(type: string, data: Buffer): Buffer {

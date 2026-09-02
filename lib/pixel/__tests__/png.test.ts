@@ -1,3 +1,4 @@
+import { deflateSync } from "zlib";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -84,5 +85,29 @@ describe("png codec", () => {
 
   it("rejects something that is not a PNG at all", () => {
     expect(() => decodePng(Buffer.from("hello world"))).toThrow(/Not a PNG/);
+  });
+
+  it("reads an RGB export with no alpha channel as fully opaque", () => {
+    // Build a 2x1 colour-type-2 PNG by hand: one red pixel, one green.
+    const raw = Buffer.from([0, 255, 0, 0, 0, 255, 0]); // filter 0, then RGB RGB
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(2, 0);
+    ihdr.writeUInt32BE(1, 4);
+    ihdr[8] = 8; // depth
+    ihdr[9] = 2; // RGB
+    const chunk = (type: string, body: Buffer) => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(body.length);
+      return Buffer.concat([len, Buffer.from(type, "ascii"), body, Buffer.alloc(4)]);
+    };
+    const file = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", ihdr),
+      chunk("IDAT", deflateSync(raw)),
+      chunk("IEND", Buffer.alloc(0)),
+    ]);
+    const image = decodePng(file);
+    expect(image.width).toBe(2);
+    expect(Array.from(image.data)).toEqual([255, 0, 0, 255, 0, 255, 0, 255]);
   });
 });

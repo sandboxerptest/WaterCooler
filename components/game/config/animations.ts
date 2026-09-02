@@ -44,13 +44,13 @@ export const WORKER_SPRITES: WorkerSpriteConfig[] = [
   { key: "character_03", path: "/characters/Premade_Character_48x48_03.png", label: "Bob" },
   { key: "character_04", path: "/characters/Premade_Character_48x48_04.png", label: "Carol" },
   { key: "character_05", path: "/characters/Premade_Character_48x48_05.png", label: "Dave" },
-  // Yoshi is held back on the art, not the code. His source sheet has no
-  // fully opaque pixel anywhere — his body sits at alpha 245-252 — and most
-  // poses have clear gaps torn through the torso and legs. Hardening the
-  // alpha, closing the gaps and filling his eyes white all helped and none of
-  // it can put back pixels that were never there. Uncomment when the sheet is
-  // redrawn opaque.
-  // { key: "character_yoshi", path: "/characters/Yoshi_Character_48x48.png", label: "Yoshi" },
+  // Built from the side-view sheet in public/characters/examples by
+  // scripts/build-character.ts — a look for the agents.
+  {
+    key: "character_data_scientist",
+    path: "/characters/Data_Scientist_48x48.png",
+    label: "Data Scientist",
+  },
 ];
 
 const directions = ["right", "up", "left", "down"] as const;
