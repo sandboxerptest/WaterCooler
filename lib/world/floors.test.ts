@@ -58,7 +58,8 @@ describe("the lift", () => {
   });
 
   it("has nobody on the agents' floor of a building with no agents", () => {
-    const stops = elevatorStops({ tenant: TENANTS[1], floor: { kind: "lobby" } }, { people: [] });
+    const finance = TENANTS.find((t) => t.slug === "homestar-finance")!;
+    const stops = elevatorStops({ tenant: finance, floor: { kind: "lobby" } }, { people: [] });
     expect(stops[2].names).toEqual([]);
   });
 

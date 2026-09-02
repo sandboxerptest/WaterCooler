@@ -200,13 +200,12 @@ export class WorldScene extends Phaser.Scene {
       ensureSheet(this, resident.spriteKey, path, (ok) => {
         if (!ok || !this.scene.isActive() || !this.residents.has(resident.id)) return;
         ensureAnims(this, resident.spriteKey);
-        const feetX = OUTSIDE_SPOT.x + i * 40;
-        const sprite = this.add
-          .sprite(feetX, OUTSIDE_SPOT.y - 43, resident.spriteKey, 0)
-          .setDepth(OUTSIDE_SPOT.y);
+        // Where the server put them; by the fountain when it did not say.
+        const spot = resident.spot ?? { x: OUTSIDE_SPOT.x + i * 40, y: OUTSIDE_SPOT.y };
+        const sprite = this.add.sprite(spot.x, spot.y - 43, resident.spriteKey, 0).setDepth(spot.y);
         sprite.play(`${resident.spriteKey}:idle-down`);
         const tag = this.add
-          .text(feetX, OUTSIDE_SPOT.y + 6, resident.name, {
+          .text(spot.x, spot.y + 6, resident.name, {
             fontFamily: '"Press Start 2P", monospace',
             fontSize: "8px",
             color: "#ffe9a8",
@@ -214,7 +213,7 @@ export class WorldScene extends Phaser.Scene {
             padding: { x: 4, y: 2 },
           })
           .setOrigin(0.5, 0)
-          .setDepth(OUTSIDE_SPOT.y + 1)
+          .setDepth(spot.y + 1)
           .setResolution(2);
         this.residents.set(resident.id, [sprite, tag]);
       });

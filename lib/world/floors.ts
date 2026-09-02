@@ -19,7 +19,7 @@
 
 import { floorRoomSlug, parseRoomPath } from "../rooms";
 import { ORGANISATIONS, hasFloors, tenantFor, type Tenant } from "./tenants";
-import { residentsOf } from "./residents";
+import { residentsAt } from "./residents";
 
 export type Level = 1 | 2;
 export type Floor = { kind: "lobby" } | { kind: "floor"; level: Level };
@@ -99,7 +99,7 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
     {
       floor: AGENTS_FLOOR,
       label: floorTitle(AGENTS_FLOOR),
-      names: residentsOf(tenant.org).map((r) => r.name),
+      names: residentsAt(tenant.slug).map((r) => r.name),
     },
   ];
 }
@@ -108,7 +108,7 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
 export function occupantsOf(tenant: Tenant, floor: Floor, occupancy: Occupancy): Occupant[] {
   if (floor.kind === "lobby") return [];
   if (floor.level === 1) return occupancy.people;
-  return residentsOf(tenant.org).map((r) => ({ id: r.id, name: r.name }));
+  return residentsAt(tenant.slug).map((r) => ({ id: r.id, name: r.name }));
 }
 
 /** What the top bar says about where you are: the floor, or nothing for a room with none. */

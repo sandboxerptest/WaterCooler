@@ -7,9 +7,9 @@
  * facings given. Left is mirrored from right by the composer, so a sheet
  * needs only down, up and right. See lib/pixel/strip.ts for the cutting.
  *
- *   pnpm tsx scripts/build-character.ts <Name> [--rows down,up,right] [--idle 3] [--walk 6] [--preview out.png]
+ *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6] [--preview out.png]
  *
- * Reads  public/characters/examples/<Name>.png
+ * Reads  public/characters/examples/<Name>.png, or --source
  * Writes public/characters/<Name>_48x48.png — then add it to WORKER_SPRITES.
  */
 
@@ -42,7 +42,9 @@ const CHARACTER_HEIGHT = 72;
 const args = process.argv.slice(2);
 const name = args.find((a) => !a.startsWith("--"));
 if (!name)
-  throw new Error("usage: build-character.ts <Name> [--rows down,up,right] [--idle 3] [--walk 6]");
+  throw new Error(
+    "usage: build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6]",
+  );
 const option = (flag: string, fallback: string) => {
   const i = args.indexOf(flag);
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
@@ -53,7 +55,7 @@ const idleCount = Number(option("--idle", "3"));
 const walkCount = Number(option("--walk", "6"));
 const preview = option("--preview", "");
 
-const SOURCE = join(process.cwd(), "public/characters/examples", `${name}.png`);
+const SOURCE = option("--source", join(process.cwd(), "public/characters/examples", `${name}.png`));
 const OUTPUT = join(process.cwd(), "public/characters", `${name}_48x48.png`);
 
 const raw = decodePng(readFileSync(SOURCE));

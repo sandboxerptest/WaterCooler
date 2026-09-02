@@ -3,9 +3,9 @@ import { Player } from "../entities/Player";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { Pathfinder } from "../utils/Pathfinder";
-import { ensureSheet } from "../utils/sheets";
+import { ensureAnims, ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
-import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
+import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
 import { PF_PADDING, ZOOM_MAX, ZOOM_MIN } from "@/lib/constants";
 import { frameZoom } from "@/lib/camera";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
@@ -17,6 +17,7 @@ import { gameEvents } from "@/lib/events";
 import { campusPath, showAddress } from "@/lib/world/paths";
 import { TILE, organisationFor, type Rect } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
+import type { Whereabouts } from "@/lib/world/residents";
 import {
   PROPS,
   groundGrid,
@@ -73,6 +74,8 @@ export class CampusScene extends Phaser.Scene {
   private zones: DoorZone[] = [];
   private pathfinder: Pathfinder | null = null;
   private campus!: Campus;
+  /** Residents currently on the yard, by id. */
+  private residents = new Map<string, Phaser.GameObjects.GameObject[]>();
   private leaving = false;
   private arrival = new ArrivalWalk();
 
@@ -102,6 +105,7 @@ export class CampusScene extends Phaser.Scene {
       return;
     }
     this.campus = campus;
+    this.residents.clear();
     this.leaving = false;
     this.latch.reset();
     // A walk that was still under way when a door fired must not resume here.
@@ -177,6 +181,10 @@ export class CampusScene extends Phaser.Scene {
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
     gameEvents.emit("place-changed", `${company?.name ?? campus.slug} · Campus`);
+
+    // Anyone out on the yard. It has no room, so ask where everyone is.
+    void this.showResidents();
+    this.time.addEvent({ delay: 10_000, loop: true, callback: () => void this.showResidents() });
     log.info(
       `on the ${organisationFor(campus.slug)?.name ?? campus.slug} campus, from ${data?.from ?? "the road"}`,
     );
@@ -288,6 +296,52 @@ export class CampusScene extends Phaser.Scene {
       const path = this.pathfinder?.findPath(from.x, from.y, world.x, world.y);
       this.navigator.follow(path?.length ? path : [{ x: world.x, y: world.y }]);
     });
+  }
+
+  /** Draw the residents the server says are on this yard, and take away those who left. */
+  private async showResidents() {
+    let here: Whereabouts[] = [];
+    try {
+      const res = await fetch("/api/residents");
+      const body = (await res.json()) as { residents?: Whereabouts[] };
+      here = (body.residents ?? []).filter(
+        (r) => r.place === "campus" && r.campus === this.campus.slug && r.spot,
+      );
+    } catch {
+      return;
+    }
+    if (!this.scene.isActive()) return;
+
+    for (const [id, parts] of this.residents) {
+      if (here.some((r) => r.id === id)) continue;
+      for (const part of parts) part.destroy();
+      this.residents.delete(id);
+    }
+    for (const resident of here) {
+      if (this.residents.has(resident.id)) continue;
+      const path = WORKER_SPRITES.find((w) => w.key === resident.spriteKey)?.path;
+      const spot = resident.spot;
+      if (!path || !spot) continue;
+      this.residents.set(resident.id, []);
+      ensureSheet(this, resident.spriteKey, path, (ok) => {
+        if (!ok || !this.scene.isActive() || !this.residents.has(resident.id)) return;
+        ensureAnims(this, resident.spriteKey);
+        const sprite = this.add.sprite(spot.x, spot.y - 43, resident.spriteKey, 0).setDepth(spot.y);
+        sprite.play(`${resident.spriteKey}:idle-down`);
+        const tag = this.add
+          .text(spot.x, spot.y + 6, resident.name, {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: "8px",
+            color: "#ffe9a8",
+            backgroundColor: "rgba(0,0,0,0.7)",
+            padding: { x: 4, y: 2 },
+          })
+          .setOrigin(0.5, 0)
+          .setDepth(spot.y + 1)
+          .setResolution(2);
+        this.residents.set(resident.id, [sprite, tag]);
+      });
+    }
   }
 
   private feet() {

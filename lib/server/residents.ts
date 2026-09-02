@@ -1,11 +1,12 @@
 /**
  * Walks the residents about.
  *
- * Each resident keeps a loose routine — their office, the lobby, outside —
- * and while they are in a room they are a player in that room's presence
- * hub like anyone else, so the people there see them wander. They take no
- * human seat and never time out. Outside has no room; the world map asks
- * where everyone is instead (see /api/residents).
+ * Each resident keeps a loose routine through their haunts — the desk,
+ * their organisation's rooms, its campus yard, outside — and while they
+ * are in a room they are a player in that room's presence hub like anyone
+ * else, so the people there see them wander. They take no human seat and
+ * never time out. Outside and a yard have no room; the world map and the
+ * campus ask where everyone is instead (see /api/residents).
  *
  * The simulation owns its clock and randomness so it can be driven by hand
  * in tests.
@@ -17,10 +18,15 @@ import {
   RESIDENTS,
   deskSpot,
   dwell,
-  nextPlace,
-  roomForPlace,
+  hauntKey,
+  hauntsOf,
+  nextHaunt,
+  outsideSpots,
+  roomForHaunt,
   wanderArea,
-  type Place,
+  yardArea,
+  type Haunt,
+  type PlaceKind,
   type Rect,
   type Resident,
   type Whereabouts,
@@ -42,16 +48,17 @@ export interface ResidentHost {
 export interface ResidentOptions {
   now?: () => number;
   random?: () => number;
-  /** Where every resident starts. */
-  startAt?: Place;
+  /** The kind of haunt every resident starts at; their first of that kind, else their first haunt. */
+  startAt?: PlaceKind;
   /** Multiplies every stay; below 1 to watch a whole day go by quickly. */
   dwellScale?: number;
 }
 
 interface State {
   resident: Resident;
-  place: Place;
+  haunt: Haunt;
   room: string | null;
+  spot: { x: number; y: number } | null;
   since: number;
   until: number;
   x: number;
@@ -65,22 +72,50 @@ interface State {
 /** How a route handler, in its own module graph, reaches the running simulation. */
 const WHEREABOUTS_KEY = Symbol.for("watercooler.residents.whereabouts");
 
-/** Where every resident is right now; their offices when nothing is running. */
+function firstHaunt(resident: Resident, kind?: PlaceKind): Haunt {
+  const haunts = hauntsOf(resident);
+  return haunts.find((h) => h.kind === kind) ?? haunts[0];
+}
+
+function describe(state: State): Whereabouts {
+  const { resident, haunt } = state;
+  return {
+    id: resident.id,
+    name: resident.name,
+    title: resident.title,
+    spriteKey: resident.spriteKey,
+    org: resident.org,
+    place: haunt.kind,
+    room: state.room,
+    campus: haunt.kind === "campus" ? haunt.campus : null,
+    spot: state.spot,
+    since: state.since,
+  };
+}
+
+/** Where every resident is right now; their first haunt when nothing is running. */
 export function residentWhereabouts(): Whereabouts[] {
   const read = (globalThis as Record<symbol, unknown>)[WHEREABOUTS_KEY] as
     | (() => Whereabouts[])
     | undefined;
   if (read) return read();
-  return RESIDENTS.map((r) => ({
-    id: r.id,
-    name: r.name,
-    title: r.title,
-    spriteKey: r.spriteKey,
-    tenant: r.tenant,
-    place: "office",
-    room: roomForPlace(r, "office"),
-    since: 0,
-  }));
+  return RESIDENTS.map((r) => {
+    const haunt = firstHaunt(r);
+    return describe({
+      resident: r,
+      haunt,
+      room: roomForHaunt(r, haunt),
+      spot: null,
+      since: 0,
+      until: 0,
+      x: 0,
+      y: 0,
+      target: null,
+      pauseUntil: 0,
+      facing: "down",
+      lastTick: 0,
+    });
+  });
 }
 
 export const presenceIdFor = (resident: Resident) => `resident:${resident.id}`;
@@ -100,21 +135,23 @@ export class ResidentSimulation {
     this.dwellScale = options.dwellScale ?? 1;
     const at = this.now();
     for (const resident of RESIDENTS) {
-      const place = options.startAt ?? "office";
-      this.states.set(resident.id, {
+      const haunt = firstHaunt(resident, options.startAt ?? "office");
+      const state: State = {
         resident,
-        place,
+        haunt,
         room: null,
+        spot: null,
         since: at,
-        until: at + this.stay(place),
+        until: at + this.stay(haunt),
         x: 0,
         y: 0,
         target: null,
         pauseUntil: 0,
         facing: "down",
         lastTick: at,
-      });
-      this.arrive(this.states.get(resident.id)!, place, at);
+      };
+      this.states.set(resident.id, state);
+      this.arrive(state, haunt, at);
     }
   }
 
@@ -132,56 +169,51 @@ export class ResidentSimulation {
   }
 
   whereabouts(): Whereabouts[] {
-    return [...this.states.values()].map((s) => ({
-      id: s.resident.id,
-      name: s.resident.name,
-      title: s.resident.title,
-      spriteKey: s.resident.spriteKey,
-      tenant: s.resident.tenant,
-      place: s.place,
-      room: s.room,
-      since: s.since,
-    }));
+    return [...this.states.values()].map(describe);
   }
 
   /** One step of everyone's day. */
   tick(now: number) {
     for (const state of this.states.values()) {
       if (now >= state.until) {
-        const next = nextPlace(state.place, this.random);
+        const next = nextHaunt(state.resident, state.haunt, this.random);
         this.leaveRoom(state);
         this.arrive(state, next, now);
         state.until = now + this.stay(next);
-        log.info(
-          `${state.resident.name} went ${next === "outside" ? "outside" : `to the ${next}`}`,
-        );
+        log.info(`${state.resident.name} went to ${hauntKey(next)}`);
       }
       if (state.room) this.wander(state, now);
       state.lastTick = now;
     }
   }
 
-  private stay(place: Place): number {
-    return Math.max(1000, dwell(place, this.random) * this.dwellScale);
+  private stay(haunt: Haunt): number {
+    return Math.max(1000, dwell(haunt.kind, this.random) * this.dwellScale);
   }
 
-  private arrive(state: State, place: Place, now: number) {
-    state.place = place;
+  private arrive(state: State, haunt: Haunt, now: number) {
+    state.haunt = haunt;
     state.since = now;
-    state.room = roomForPlace(state.resident, place);
+    state.room = roomForHaunt(state.resident, haunt);
     state.target = null;
+    state.spot = null;
     state.pauseUntil = now + 800;
-    const area = wanderArea(place);
+    const area = wanderArea(haunt);
     if (area) {
       state.x = area.x + area.width / 2;
       state.y = area.y + area.height / 2;
       state.facing = "down";
-    } else if (place === "office") {
+    } else if (haunt.kind === "office") {
       // At the desk, facing it, and staying put.
       const spot = deskSpot(state.resident);
       state.x = spot.x;
       state.y = spot.y;
       state.facing = "up";
+    } else if (haunt.kind === "outside") {
+      const spots = outsideSpots(state.resident);
+      state.spot = spots[Math.min(spots.length - 1, Math.floor(this.random() * spots.length))];
+    } else if (haunt.kind === "campus") {
+      state.spot = randomPoint(yardArea(haunt.campus), this.random);
     }
     if (state.room) this.ensureInRoom(state);
   }
@@ -213,7 +245,7 @@ export class ResidentSimulation {
     this.ensureInRoom(state);
     const { hub } = this.host.roomFor(state.room);
     const id = presenceIdFor(state.resident);
-    const area = wanderArea(state.place);
+    const area = wanderArea(state.haunt);
     if (!area) {
       hub.move(id, { x: state.x, y: state.y, facing: state.facing, moving: false });
       return;
