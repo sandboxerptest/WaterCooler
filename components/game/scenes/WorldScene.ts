@@ -6,7 +6,7 @@ import { Pathfinder } from "../utils/Pathfinder";
 import { ensureAnims, ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
 import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
-import { PF_PADDING } from "@/lib/constants";
+import { PF_PADDING, ZOOM_MAX, ZOOM_MIN } from "@/lib/constants";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
 import { ArrivalWalk } from "@/lib/arrival";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
@@ -14,6 +14,7 @@ import { rememberedCharacter } from "@/lib/characters/choice";
 import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
 import { gameEvents } from "@/lib/events";
+import { frameZoom } from "@/lib/camera";
 import { WORLD_PATH, showAddress } from "@/lib/world/paths";
 import {
   BUILDINGS,
@@ -153,7 +154,16 @@ export class WorldScene extends Phaser.Scene {
     cam.setBackgroundColor("#1a1814");
     cam.setRoundPixels(true);
     cam.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    cam.setZoom(Math.max(cam.width / WORLD_WIDTH, cam.height / WORLD_HEIGHT, 0.8));
+    // The rooms' zoom, so people and signs are the size they are indoors;
+    // never so far out that the camera would look past the world's edge.
+    const zoom = () =>
+      Math.max(
+        frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX),
+        cam.width / WORLD_WIDTH,
+        cam.height / WORLD_HEIGHT,
+      );
+    cam.setZoom(zoom());
+    this.scale.on("resize", () => cam.setZoom(zoom()));
     cam.startFollow(this.player.sprite, true, 0.12, 0.12);
 
     this.gamepad = new GamepadInput(this);
@@ -280,8 +290,8 @@ export class WorldScene extends Phaser.Scene {
     // the band's ends.
     this.add
       .text(b.frame.x + b.frame.width / 2, b.frame.y + SIGN_Y[b.art], b.org.name.toUpperCase(), {
-        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "16px",
+        fontFamily: '"Press Start 2P", monospace',
+        fontSize: "18px",
         color: "#1b1b2a",
         align: "center",
         backgroundColor: "#e0b870",

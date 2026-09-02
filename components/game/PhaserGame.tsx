@@ -6,6 +6,19 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("PhaserGame");
 
+/** The faces the scenes paint with, and how long to wait for them before going ahead without. */
+const GAME_FONTS = ['18px "ArkPixel"', '18px "Press Start 2P"'];
+const FONT_WAIT_MS = 3000;
+
+async function fontsReady(): Promise<void> {
+  if (typeof document === "undefined" || !("fonts" in document)) return;
+  const loads = GAME_FONTS.map((font) => document.fonts.load(font).catch(() => []));
+  await Promise.race([
+    Promise.all(loads),
+    new Promise<void>((resolve) => setTimeout(resolve, FONT_WAIT_MS)),
+  ]);
+}
+
 export default function PhaserGame() {
   const gameRef = useRef<PhaserTypes.Game | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,6 +32,11 @@ export default function PhaserGame() {
 
       const { gameConfig } = await import("./config");
       const Phaser = await import("phaser");
+      // Phaser paints text onto a canvas once, when the text is made. If the
+      // pixel fonts have not arrived by then the first scene's signs are
+      // painted in the fallback face — a different size from every scene
+      // after it. So wait for them, briefly, before the first scene starts.
+      await fontsReady();
 
       if (!mounted) return;
 

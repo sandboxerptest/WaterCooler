@@ -202,7 +202,6 @@ export const SCENERY: readonly PlacedProp[] = [
     { kind: "bench", x: 720, y: 720 },
     { kind: "lamp", x: 504, y: 560 },
     { kind: "lamp", x: 936, y: 560 },
-    { kind: "signpost", x: 800, y: 930 },
   ]),
 
   // South of the north road: a park with a pond in the middle stretch,
@@ -219,7 +218,6 @@ export const SCENERY: readonly PlacedProp[] = [
   { kind: "planter", x: CENTRE_X + 1100, y: 1000 },
   { kind: "tree", x: CENTRE_X + 1000, y: 1200 },
   { kind: "tree", x: CENTRE_X + 1240, y: 1300 },
-  { kind: "signpost", x: CENTRE_X + 800, y: 1040 },
   // The lab stands back among trees.
   ...treeLine(990, [80, 210, 330]),
   { kind: "tree", x: 520, y: 1120 },

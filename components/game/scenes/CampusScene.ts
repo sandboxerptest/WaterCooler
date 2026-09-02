@@ -255,8 +255,8 @@ export class CampusScene extends Phaser.Scene {
         b.frame.y + (SIGN_Y[b.art] ?? 60),
         (b.tenant.location ?? "").toUpperCase(),
         {
-          fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-          fontSize: b.art.endsWith("-2x") ? "16px" : "11px",
+          fontFamily: '"Press Start 2P", monospace',
+          fontSize: b.art.endsWith("-2x") ? "18px" : "11px",
           color: "#1b1b2a",
           align: "center",
           backgroundColor: "#e0b870",
