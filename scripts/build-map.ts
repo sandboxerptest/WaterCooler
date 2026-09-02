@@ -14,6 +14,8 @@ import { basename, join } from "path";
 import { generateMap, type TilesetRef } from "../lib/map/generate";
 import { buildOfficeSpec } from "../lib/map/office";
 import { buildFloorSpec } from "../lib/map/floor";
+import { buildGarageSpec, buildStoreSpec, buildWarehouseSpec } from "../lib/map/premises";
+import { TENANTS, storeOf, tenantsOf } from "../lib/world/tenants";
 import type { SourceMap } from "../lib/map/harvest";
 
 const MAPS = join(process.cwd(), "public", "maps");
@@ -31,11 +33,30 @@ const tilesets: TilesetRef[] = raw.tilesets.map((ts) => ({
   image: `../tilesets/${basename(ts.image)}`,
 }));
 
+/** Every store, warehouse and garage is its own map, with the doors its business has. */
+const premises = TENANTS.filter((t) => t.kind && t.kind !== "office").map((t) => {
+  const siblings = tenantsOf(t.org);
+  const store = storeOf(t.org)?.slug ?? t.slug;
+  const build = () => {
+    if (t.kind === "store") {
+      return buildStoreSpec({
+        self: t.slug,
+        warehouse: siblings.find((s) => s.kind === "warehouse")?.slug,
+        fieldCrew: siblings.find((s) => s.kind === "garage")?.slug,
+      });
+    }
+    return t.kind === "warehouse" ? buildWarehouseSpec(store) : buildGarageSpec(store);
+  };
+  return [`room-${t.slug}.json`, build] as const;
+});
+
 for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
+  ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby-castle-atlantic.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
   ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball")],
   ["floor.json", buildFloorSpec],
+  ...premises,
 ] as const) {
   const spec = build(raw);
   const map = generateMap(spec, tilesets);

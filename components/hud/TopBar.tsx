@@ -1,7 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { gameEvents } from "@/lib/events";
 import { addressFromLocation, describeFloor } from "@/lib/world/floors";
+import { tenantTitle } from "@/lib/world/tenants";
 
 import Image from "next/image";
 import type { SeatState } from "@/types/game";
@@ -29,7 +31,9 @@ const noSubscribe = () => () => {};
 /** "Castle Atlantic · Lobby": the building and the floor, as a stable string. */
 const readPlace = () => {
   const address = addressFromLocation(window.location);
-  return address ? `${address.tenant.name} · ${describeFloor(address)}` : null;
+  if (!address) return null;
+  const floor = describeFloor(address);
+  return floor ? `${tenantTitle(address.tenant)} · ${floor}` : tenantTitle(address.tenant);
 };
 
 export default function TopBar({
@@ -40,7 +44,12 @@ export default function TopBar({
   iconOverrides,
   onSeatClick,
 }: TopBarProps) {
-  const place = useSyncExternalStore(noSubscribe, readPlace, () => null);
+  const roomPlace = useSyncExternalStore(noSubscribe, readPlace, () => null);
+  // A scene that is not the room in the URL — the world map, a campus —
+  // says where you are itself.
+  const [scenePlace, setScenePlace] = useState<string | null>(null);
+  useEffect(() => gameEvents.on("place-changed", (label) => setScenePlace(label)), []);
+  const place = scenePlace ?? roomPlace;
   const assignedSeats = seats.filter((s) => s.assigned);
 
   return (

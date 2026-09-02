@@ -13,11 +13,13 @@ import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { rememberedCharacter } from "@/lib/characters/choice";
 import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
+import { gameEvents } from "@/lib/events";
 import {
   BUILDINGS,
   TILE,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  buildingFrom,
   spawnFor,
   type Building,
   type Rect,
@@ -33,24 +35,39 @@ import {
 
 const log = createLogger("World");
 
-const GROUND = { grass: "world-grass", paving: "world-paving", kerb: "world-kerb" } as const;
+const GROUND = {
+  grass: "world-grass",
+  paving: "world-paving",
+  kerb: "world-kerb",
+  asphalt: "world-asphalt",
+} as const;
 const PROPS_KEY = "world-props";
 /** Where each building's name goes: the blank sign the picture leaves, from the frame's top. */
-const SIGN_Y = { castle: 175, office: 186 } as const;
+const SIGN_Y: Record<string, number> = {
+  "world-castle": 175,
+  "world-office": 186,
+  "world-supply": 92,
+  "world-blocks": 169,
+  "world-campus": 173,
+};
+/** A door zone target that starts a scene rather than loading a page. */
+const CAMPUS_TARGET = "campus:";
 
 export interface WorldSceneData {
-  /** The tenant whose building the person just walked out of, if any. */
+  /** The tenant or campus whose building the person just walked out of, if any. */
   from?: string | null;
 }
 
 /**
  * Outside.
  *
- * The world map is the space between businesses: two buildings on a green
- * with a plaza between them, and a path to each door. Walking into a door
- * moves you to that tenant's room, which is a new page — every room carries
- * its own people, agents and conversation, so the boundary between
- * businesses is the room boundary.
+ * The world map is the space between businesses: three screens of green
+ * with the two head offices and a plaza in the middle, the building supply
+ * stores to the west and the campus gate to the east, and a path to each
+ * door. Walking into a lobby's door moves you to that tenant's room, which
+ * is a new page — every room carries its own people, agents and
+ * conversation, so the boundary between businesses is the room boundary.
+ * Walking through a campus gate goes onto its yard, another scene here.
  *
  * Deliberately a lobby and not a place: no presence, no chat, nothing to do
  * but choose a door.
@@ -76,8 +93,14 @@ export class WorldScene extends Phaser.Scene {
     this.load.image(GROUND.grass, "/sprites/world/grass_48.png");
     this.load.image(GROUND.paving, "/sprites/world/paving_48.png");
     this.load.image(GROUND.kerb, "/sprites/world/kerb_48.png");
+    this.load.image(GROUND.asphalt, "/sprites/world/asphalt_48.png");
+    this.load.image("world-pond", "/sprites/world/pond_288x192.png");
+    this.load.image("van", "/sprites/world/van_96x144.png");
     this.load.image("world-castle", "/sprites/world/building_castle.png");
     this.load.image("world-office", "/sprites/world/building_office.png");
+    this.load.image("world-supply", "/sprites/world/building_supply.png");
+    this.load.image("world-blocks", "/sprites/world/building_blocks.png");
+    this.load.image("world-campus", "/sprites/world/building_campus.png");
     this.load.image(PROPS_KEY, "/sprites/world/props.png");
     this.load.json("world-props-frames", "/sprites/world/props.json");
     // Normally already loaded by the office; guarded for a direct arrival.
@@ -106,7 +129,7 @@ export class WorldScene extends Phaser.Scene {
     // Out of a building's door: a few steps down the path before the keys
     // are yours, so the key held through the door does not walk you back in.
     this.arrival.reset();
-    if (BUILDINGS.some((b) => b.tenant.slug === data?.from)) this.arrival.begin("down", 96);
+    if (buildingFrom(data?.from)) this.arrival.begin("down", 96);
     this.player.sprite.setCollideWorldBounds(true);
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.physics.add.collider(this.player.sprite, walls);
@@ -128,6 +151,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
+    gameEvents.emit("place-changed", "World map");
     log.info(`outside, arriving from ${data?.from ?? "the road"}`);
 
     // Anyone taking the air. Outside has no room, so ask where everyone is.
@@ -216,7 +240,9 @@ export class WorldScene extends Phaser.Scene {
     const spec: PropSpec = PROPS[prop.kind];
     const image = spec.animate
       ? this.add.sprite(prop.x, prop.y, PROPS_KEY, prop.kind).play("world-fountain")
-      : this.add.image(prop.x, prop.y, PROPS_KEY, prop.kind);
+      : spec.texture
+        ? this.add.image(prop.x, prop.y, spec.texture)
+        : this.add.image(prop.x, prop.y, PROPS_KEY, prop.kind);
     // Feet on the ground; whoever's feet are lower stands in front.
     image.setOrigin(0.5, 1).setDepth(prop.y);
     const body = propBody(prop);
@@ -237,29 +263,30 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private placeBuilding(b: Building, walls: Phaser.Physics.Arcade.StaticGroup): DoorZone {
-    const key = b.tenant.style === "castle" ? "world-castle" : "world-office";
     const foot = b.frame.y + b.frame.height;
-    this.add.image(b.frame.x, b.frame.y, key).setOrigin(0, 0).setDepth(foot);
+    this.add.image(b.frame.x, b.frame.y, b.art).setOrigin(0, 0).setDepth(foot);
     this.solid(walls, b.solid);
 
-    // The name, on the sign the picture leaves blank.
+    // The name, on the sign the picture leaves blank — large, on its own
+    // strip of the sign's colour, so it reads from across the green.
     this.add
-      .text(b.frame.x + b.frame.width / 2, b.frame.y + SIGN_Y[b.tenant.style], b.tenant.name, {
+      .text(b.frame.x + b.frame.width / 2, b.frame.y + SIGN_Y[b.art], b.org.name.toUpperCase(), {
         fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "11px",
+        fontSize: "14px",
         color: "#1b1b2a",
         align: "center",
+        backgroundColor: "#e0b870",
+        padding: { x: 6, y: 2 },
       })
       .setOrigin(0.5, 0.5)
       .setDepth(foot + 1)
       .setResolution(2);
 
-    return {
-      name: b.tenant.slug,
-      target: floorUrl(b.tenant, LOBBY, "door"),
-      ...b.door,
-      facing: "up",
-    };
+    const target =
+      b.entrance.kind === "lobby"
+        ? floorUrl(b.entrance.tenant, LOBBY, "door")
+        : `${CAMPUS_TARGET}${b.entrance.campus}`;
+    return { name: b.org.slug, target, ...b.door, facing: "up" };
   }
 
   private initTapToWalk() {
@@ -293,12 +320,7 @@ export class WorldScene extends Phaser.Scene {
         const wanted = this.player.inputVelocity(this.gamepad.velocity(MOVE_SPEED));
         this.arrival.release(wanted.vx !== 0 || wanted.vy !== 0);
         this.player.drive(this.arrival.allow(wanted));
-        for (const zone of this.latch.step(this.zones, this.feet())) {
-          this.leaving = true;
-          this.player.update({ vx: 0, vy: 0 });
-          log.info(`entering ${zone.name}`);
-          window.location.assign(zone.target);
-        }
+        for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
       }
       this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
       return;
@@ -315,11 +337,18 @@ export class WorldScene extends Phaser.Scene {
     // Sort against the props by where the feet are.
     this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
 
-    for (const zone of this.latch.step(this.zones, this.feet())) {
-      this.leaving = true;
-      this.player.update({ vx: 0, vy: 0 });
-      log.info(`entering ${zone.name}`);
-      window.location.assign(zone.target);
+    for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
+  }
+
+  /** Through a door: onto a campus here, or off to a lobby's page. */
+  private enter(zone: DoorZone) {
+    this.leaving = true;
+    this.player.update({ vx: 0, vy: 0 });
+    log.info(`entering ${zone.name}`);
+    if (zone.target.startsWith(CAMPUS_TARGET)) {
+      this.scene.start("CampusScene", { campus: zone.target.slice(CAMPUS_TARGET.length) });
+      return;
     }
+    window.location.assign(zone.target);
   }
 }

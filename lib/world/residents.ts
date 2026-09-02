@@ -11,6 +11,7 @@
  */
 
 import { floorRoomSlug } from "../rooms";
+import { tenantsOf } from "./tenants";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { standingSpot } from "./desks";
 
@@ -19,7 +20,7 @@ export interface Resident {
   id: string;
   name: string;
   title: string;
-  /** Slug of the building they work in. */
+  /** Slug of the organisation they work for. */
   tenant: string;
   /** A library sheet key (see WORKER_SPRITES). */
   spriteKey: string;
@@ -59,10 +60,16 @@ export function deskSpot(resident: Resident): { x: number; y: number } {
 export type Place = "office" | "lobby" | "outside";
 export const PLACES: readonly Place[] = ["office", "lobby", "outside"];
 
+/** An organisation's first lobby: where its agents wander and have their desks. */
+export function homeLobbyOf(orgSlug: string): string {
+  return tenantsOf(orgSlug)[0]?.slug ?? orgSlug;
+}
+
 /** The presence room a resident is in at a place; none when outside. */
 export function roomForPlace(resident: Resident, place: Place): string | null {
-  if (place === "lobby") return resident.tenant;
-  if (place === "office") return floorRoomSlug(resident.tenant, AGENTS_LEVEL);
+  const lobby = homeLobbyOf(resident.tenant);
+  if (place === "lobby") return lobby;
+  if (place === "office") return floorRoomSlug(lobby, AGENTS_LEVEL);
   return null;
 }
 

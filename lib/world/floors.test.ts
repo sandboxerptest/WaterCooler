@@ -62,6 +62,16 @@ describe("the lift", () => {
     expect(stops[2].names).toEqual([]);
   });
 
+  it("draws each room from the right map: a game lobby its own, premises their own, the rest shared", () => {
+    expect(mapFileFor({ tenant: TENANTS[0], floor: { kind: "lobby" } })).toBe(
+      "/maps/lobby-castle-atlantic.json",
+    );
+    expect(mapFileFor({ tenant: TENANTS[2], floor: { kind: "lobby" } })).toBe(
+      "/maps/room-chester-warehouse.json",
+    );
+    expect(mapFileFor({ tenant: TENANTS[7], floor: { kind: "lobby" } })).toBe("/maps/lobby.json");
+  });
+
   it("knows which floor you are on", () => {
     const stops = elevatorStops({ tenant: castle, floor: PEOPLE_FLOOR }, { people });
     expect(stops.map((s) => s.here)).toEqual([false, true, false]);

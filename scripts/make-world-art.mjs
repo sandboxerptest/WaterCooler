@@ -154,6 +154,60 @@ function kerb() {
   return c;
 }
 
+function asphalt() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, [86, 89, 114, 255]);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) if (hash(x + 3, y + 9) < 0.06) c.set(x, y, [78, 80, 104, 255]);
+  // a bay line down the left edge: repeated, the tiles read as parking bays
+  c.rect(0, 4, 3, 44, [216, 208, 224, 255]);
+  return c;
+}
+
+/** A pond: water with ripples, a stone rim, and reeds at the edge. */
+function pond() {
+  const c = canvas(288, 192);
+  c.ellipse(144, 140, 136, 44, P.shadow);
+  c.ellipse(144, 110, 140, 70, P.ink);
+  c.ellipse(144, 110, 138, 68, P.stoneDark);
+  c.ellipse(144, 108, 132, 62, P.slab);
+  c.ellipse(144, 108, 126, 56, P.ink);
+  c.ellipse(144, 108, 124, 54, P.waterDark);
+  c.ellipse(144, 104, 110, 44, P.water);
+  for (const [rx, ry, cx, cy] of [
+    [60, 20, 110, 100],
+    [40, 14, 190, 96],
+    [24, 8, 150, 120],
+  ]) {
+    for (let a = 0; a < 360; a += 4) {
+      const x = Math.round(cx + Math.cos((a * Math.PI) / 180) * rx);
+      const y = Math.round(cy + Math.sin((a * Math.PI) / 180) * ry);
+      c.set(x, y, P.waterLit);
+    }
+  }
+  // reeds
+  for (const [x, y] of [
+    [30, 120],
+    [40, 128],
+    [250, 118],
+    [262, 126],
+    [140, 160],
+  ]) {
+    for (let i = 0; i < 18; i++) c.set(x + (i % 3) - 1, y - i, i > 12 ? P.leafLit : P.leafDark);
+    c.rect(x - 1, y - 20, x + 2, y - 15, P.wood);
+  }
+  // lily pads
+  for (const [x, y] of [
+    [120, 92],
+    [176, 112],
+    [96, 118],
+  ]) {
+    c.disc(x, y, 6, P.leafDark);
+    c.disc(x - 1, y - 1, 4, P.leaf);
+  }
+  return c;
+}
+
 // ── Props: one sheet, each prop in a named rectangle ──
 const props = canvas(768, 128);
 const frames = {};
@@ -423,6 +477,432 @@ function office() {
   return c;
 }
 
+// ── More buildings ──
+const wood = P.wood;
+const woodLit = P.woodLit;
+const woodDark = P.woodDark;
+
+/** A timber-yard store: a broad shed with a pitched roof and lumber stacked beside it. */
+function supply() {
+  const c = canvas(W, H);
+  c.rect(0, 252, W, 268, P.shadow);
+  // walls: horizontal boards
+  c.rect(24, 120, 264, 258, wood);
+  for (let y = 124; y < 258; y += 8) c.rect(24, y, 264, y + 1, woodDark);
+  c.rect(24, 120, 264, 124, woodLit);
+  // pitched roof, corrugated
+  for (let i = 0; i < 60; i++) {
+    const x0 = 12 + i,
+      x1 = 276 - i;
+    c.rect(x0, 120 - i, x1, 121 - i, i % 6 < 3 ? P.steel : P.steelDark);
+  }
+  c.rect(12, 118, 276, 124, P.ink);
+  for (let i = 0; i < 60; i++) {
+    c.set(12 + i, 120 - i, P.ink);
+    c.set(275 - i, 120 - i, P.ink);
+  }
+  c.rect(72, 60, 216, 62, P.ink);
+  // big double door, open onto a dark interior, with lumber inside
+  c.rect(104, 172, 184, 258, P.ink);
+  c.rect(108, 176, 180, 258, [64, 52, 46, 255]);
+  for (let y = 214; y < 258; y += 10) c.rect(112, y, 176, y + 6, woodLit);
+  c.rect(142, 176, 146, 258, P.ink);
+  // windows either side
+  for (const wx of [40, 220]) {
+    c.rect(wx, 150, wx + 28, 176, P.ink);
+    c.rect(wx + 3, 153, wx + 25, 173, P.glass);
+    c.rect(wx + 3, 153, wx + 10, 160, P.glassLit);
+    c.rect(wx - 2, 176, wx + 30, 179, P.slabLit);
+  }
+  // sign board on the roof face
+  c.rect(84, 76, 204, 108, P.yellow);
+  c.rect(84, 76, 204, 79, P.slabLit);
+  c.outline(83, 75, 205, 109);
+  // lumber stack beside the shed
+  for (let row = 0; row < 4; row++)
+    for (let k = 0; k < 3; k++) {
+      const x = 2 + k * 8 + (row % 2) * 4,
+        y = 226 - row * 8;
+      c.rect(x, y, x + 8, y + 8, wood);
+      c.rect(x + 1, y + 1, x + 7, y + 3, woodLit);
+      c.outline(x, y, x + 8, y + 8);
+    }
+  c.rect(24 - 2, 258, 264 + 2, 266, P.slab);
+  c.rect(22, 258, 266, 260, P.slabLit);
+  c.outline(22, 257, 266, 267);
+  c.outline(24, 120, 264, 259);
+  return c;
+}
+
+/** A concrete-block builder's merchant: heavy, square, with a red awning and stacked blocks. */
+function blocks() {
+  const c = canvas(W, H);
+  c.rect(0, 252, W, 268, P.shadow);
+  c.rect(24, 72, 264, 258, P.stoneDark);
+  for (let y = 76; y < 258; y += 10)
+    for (let x = 24 + ((y / 10) % 2) * 10; x < 264; x += 20) {
+      c.rect(x + 1, y, x + 19, y + 8, P.stone);
+      c.rect(x + 1, y, x + 19, y + 2, [190, 176, 175, 255]);
+    }
+  c.rect(24, 60, 264, 72, P.ink2);
+  c.rect(30, 52, 258, 60, P.steelDark);
+  c.outline(30, 52, 258, 61);
+  // awning over the door and window band
+  for (let x = 60; x < 228; x += 12) {
+    c.rect(x, 190, x + 6, 208, P.red);
+    c.rect(x + 6, 190, x + 12, 208, P.slabLit);
+  }
+  c.rect(60, 186, 228, 190, [140, 70, 50, 255]);
+  c.outline(60, 186, 228, 209);
+  // wide window band
+  c.rect(40, 100, 248, 150, P.ink);
+  c.rect(44, 104, 244, 146, P.glass);
+  c.rect(44, 104, 100, 118, P.glassLit);
+  for (const wx of [110, 176]) c.rect(wx, 104, wx + 4, 146, P.ink);
+  // sign
+  c.rect(80, 156, 208, 182, P.yellow);
+  c.rect(80, 156, 208, 159, P.slabLit);
+  c.outline(79, 155, 209, 183);
+  // door
+  const dx = (W - 72) / 2;
+  c.rect(dx - 4, 210, dx + 76, 258, P.ink);
+  c.rect(dx, 214, dx + 72, 258, [159, 211, 234, 255]);
+  c.rect(dx + 34, 214, dx + 38, 258, P.ink);
+  // stacked blocks by the door
+  for (let row = 0; row < 3; row++)
+    for (let k = 0; k < 2; k++) {
+      const x = 4 + k * 12 + (row % 2) * 6,
+        y = 240 - row * 10;
+      c.rect(x, y, x + 12, y + 10, P.stone);
+      c.rect(x + 1, y + 1, x + 11, y + 3, [190, 176, 175, 255]);
+      c.outline(x, y, x + 12, y + 10);
+    }
+  c.rect(dx - 8, 258, dx + 80, 266, P.slab);
+  c.rect(dx - 8, 258, dx + 80, 260, P.slabLit);
+  c.outline(dx - 8, 257, dx + 80, 267);
+  c.outline(24, 60, 264, 259);
+  return c;
+}
+
+/** The campus gate: a wide glass headquarters behind a gateway with flags. */
+function campus() {
+  const CW = 384;
+  const c = canvas(CW, H);
+  c.rect(0, 252, CW, 268, P.shadow);
+  // three buildings behind the wall, each its own kind
+  const wallA = [94, 127, 163, 255];
+  c.rect(24, 60, 120, 176, wallA);
+  c.rect(24, 60, 120, 68, P.ink2);
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 2; col++) {
+      const wx = 36 + col * 40;
+      const wy = 78 + row * 30;
+      c.rect(wx, wy, wx + 28, wy + 20, P.ink);
+      c.rect(wx + 2, wy + 2, wx + 26, wy + 18, P.glass);
+      c.rect(wx + 2, wy + 2, wx + 10, wy + 8, P.glassLit);
+    }
+  }
+  c.outline(24, 60, 120, 177);
+  c.rect(150, 40, 234, 176, P.stoneDark);
+  for (let y = 44; y < 176; y += 10) {
+    for (let x = 150 + ((y / 10) % 2) * 8; x < 234; x += 16) {
+      c.rect(x + 1, y, x + 15, y + 8, P.stone);
+      c.rect(x + 1, y, x + 15, y + 2, [190, 176, 175, 255]);
+    }
+  }
+  c.rect(146, 30, 238, 40, P.teal);
+  c.rect(146, 30, 238, 33, [66, 150, 144, 255]);
+  c.outline(146, 30, 238, 41);
+  for (const wx of [162, 200]) {
+    c.rect(wx, 60, wx + 22, 96, P.ink);
+    c.rect(wx + 3, 63, wx + 19, 93, P.glass);
+  }
+  c.rect(160, 120, 224, 136, P.yellow);
+  c.outline(159, 119, 225, 137);
+  c.outline(150, 40, 234, 177);
+  c.rect(264, 76, 360, 176, P.steelDark);
+  for (let x = 266; x < 360; x += 6) c.rect(x, 80, x + 3, 176, P.steel);
+  for (let i = 0; i < 16; i++) {
+    c.rect(258 + i, 76 - i, 366 - i, 77 - i, i % 4 < 2 ? P.stoneDark : P.steelDark);
+  }
+  c.rect(288, 120, 336, 176, P.ink);
+  c.rect(291, 123, 333, 176, [64, 52, 46, 255]);
+  c.outline(264, 76, 360, 177);
+  // trees between them
+  for (const [tx, ty] of [
+    [136, 150],
+    [250, 140],
+    [372, 160],
+    [12, 150],
+  ]) {
+    c.disc(tx, ty, 14, P.ink);
+    c.disc(tx, ty, 12, P.leafDark);
+    c.disc(tx - 3, ty - 3, 7, P.leaf);
+    c.rect(tx - 2, ty + 10, tx + 2, ty + 24, P.woodDark);
+  }
+  // a low wall along the front, with a gateway and lamps
+  for (const [x0, x1] of [
+    [0, 150],
+    [234, CW],
+  ]) {
+    c.rect(x0, 200, x1, 232, P.stone);
+    c.rect(x0, 200, x1, 206, P.slabLit);
+    c.rect(x0, 226, x1, 232, P.stoneDark);
+    c.outline(x0, 199, x1, 233);
+  }
+  for (const px of [140, 232]) {
+    c.rect(px, 184, px + 12, 240, P.stone);
+    c.rect(px, 184, px + 12, 188, P.slabLit);
+    c.outline(px, 184, px + 12, 241);
+    c.rect(px + 2, 174, px + 10, 184, P.yellow);
+    c.outline(px + 1, 173, px + 11, 185);
+  }
+  c.rect(130, 160, 254, 176, P.yellow);
+  c.rect(130, 160, 254, 163, P.slabLit);
+  c.outline(129, 159, 255, 177);
+  c.rect(152, 176, 232, 232, P.slab);
+  for (let y = 182; y < 232; y += 12) c.rect(152, y, 232, y + 1, P.grout);
+  c.rect(144, 258, 240, 266, P.slab);
+  c.rect(144, 258, 240, 260, P.slabLit);
+  c.outline(144, 257, 240, 267);
+  return c;
+}
+
+/** A field crew van, seen from above: white, with the business's stripe, roof rack and mirrors. */
+function van() {
+  const c = canvas(96, 144);
+  c.rect(10, 130, 86, 140, P.shadow);
+  // tyres
+  for (const [x, y] of [
+    [8, 26],
+    [8, 106],
+    [80, 26],
+    [80, 106],
+  ])
+    c.rect(x, y, x + 8, y + 18, P.ink);
+  // body
+  c.rect(14, 6, 82, 134, P.ink);
+  c.rect(16, 8, 80, 132, [235, 228, 242, 255]);
+  c.rect(16, 8, 80, 12, [250, 250, 250, 255]);
+  // windscreen and rear window
+  c.rect(20, 14, 76, 34, P.ink);
+  c.rect(22, 16, 74, 32, P.glass);
+  c.rect(22, 16, 40, 22, P.glassLit);
+  c.rect(20, 118, 76, 128, P.ink);
+  c.rect(22, 120, 74, 126, P.glass);
+  // roof: a stripe and a ladder rack
+  c.rect(16, 40, 80, 48, P.teal);
+  c.rect(16, 40, 80, 42, [66, 150, 144, 255]);
+  c.rect(16, 100, 80, 108, P.teal);
+  c.rect(16, 100, 80, 102, [66, 150, 144, 255]);
+  for (const y of [52, 92]) c.rect(20, y, 76, y + 3, P.steelDark);
+  for (const x of [22, 72]) c.rect(x, 52, x + 3, 95, P.steelDark);
+  for (let y = 58; y < 92; y += 8) c.rect(25, y, 71, y + 2, P.steel);
+  // mirrors and lights
+  c.rect(8, 30, 14, 36, P.ink);
+  c.rect(82, 30, 88, 36, P.ink);
+  c.rect(18, 9, 26, 12, P.yellow);
+  c.rect(70, 9, 78, 12, P.yellow);
+  c.rect(18, 128, 26, 131, P.red);
+  c.rect(70, 128, 78, 131, P.red);
+  c.outline(14, 6, 82, 134);
+  return c;
+}
+
+// ── Little buildings on a campus: 144px square, sign band blank ──
+const S = 144;
+function site(draw) {
+  const c = canvas(S, S);
+  c.rect(0, 126, S, 136, P.shadow);
+  draw(c);
+  return c;
+}
+function siteWarehouse() {
+  return site((c) => {
+    c.rect(12, 44, 132, 128, P.steelDark);
+    for (let x = 14; x < 132; x += 6) c.rect(x, 48, x + 3, 128, P.steel);
+    for (let i = 0; i < 24; i++) {
+      c.rect(6 + i, 44 - i, 138 - i, 45 - i, i % 4 < 2 ? P.stoneDark : P.steelDark);
+      c.set(6 + i, 44 - i, P.ink);
+      c.set(137 - i, 44 - i, P.ink);
+    }
+    c.rect(30, 20, 114, 22, P.ink);
+    c.rect(48, 78, 96, 128, P.ink);
+    c.rect(51, 81, 93, 128, [64, 52, 46, 255]);
+    for (let y = 84; y < 128; y += 8) c.rect(51, y, 93, y + 2, P.steelDark);
+    c.rect(36, 52, 108, 70, P.yellow);
+    c.rect(36, 52, 108, 55, P.slabLit);
+    c.outline(35, 51, 109, 71);
+    c.rect(40, 128, 104, 134, P.slab);
+    c.outline(40, 127, 104, 135);
+    c.outline(12, 44, 132, 129);
+  });
+}
+function siteStore() {
+  return site((c) => {
+    c.rect(12, 34, 132, 128, P.woodLit);
+    c.rect(12, 34, 132, 42, P.ink2);
+    c.rect(20, 50, 124, 68, P.yellow);
+    c.rect(20, 50, 124, 53, P.slabLit);
+    c.outline(19, 49, 125, 69);
+    for (let x = 16; x < 128; x += 12) {
+      c.rect(x, 74, x + 6, 90, P.red);
+      c.rect(x + 6, 74, x + 12, 90, P.slabLit);
+    }
+    c.outline(16, 72, 128, 91);
+    c.rect(20, 92, 56, 122, P.ink);
+    c.rect(23, 95, 53, 119, P.glass);
+    c.rect(23, 95, 36, 104, P.glassLit);
+    c.rect(88, 92, 124, 122, P.ink);
+    c.rect(91, 95, 121, 119, P.glass);
+    c.rect(60, 92, 84, 128, P.ink);
+    c.rect(63, 95, 81, 128, [159, 211, 234, 255]);
+    c.rect(71, 95, 73, 128, P.ink);
+    c.rect(56, 128, 88, 134, P.slab);
+    c.outline(56, 127, 88, 135);
+    c.outline(12, 34, 132, 129);
+  });
+}
+function siteGarage() {
+  return site((c) => {
+    c.rect(8, 50, 136, 128, P.stoneDark);
+    for (let y = 54; y < 128; y += 10)
+      for (let x = 8 + ((y / 10) % 2) * 8; x < 136; x += 16)
+        c.rect(x + 1, y, x + 15, y + 8, P.stone);
+    c.rect(4, 42, 140, 50, P.steelDark);
+    c.rect(4, 42, 140, 44, P.steel);
+    c.outline(4, 42, 140, 51);
+    for (const gx of [16, 80]) {
+      c.rect(gx, 78, gx + 48, 128, P.ink);
+      c.rect(gx + 3, 81, gx + 45, 128, P.steel);
+      for (let y = 86; y < 128; y += 8) c.rect(gx + 3, y, gx + 45, y + 2, P.steelDark);
+    }
+    c.rect(40, 54, 104, 72, P.yellow);
+    c.rect(40, 54, 104, 57, P.slabLit);
+    c.outline(39, 53, 105, 73);
+    // a hazard stripe along the base
+    for (let x = 8; x < 136; x += 8) c.rect(x, 128, x + 4, 132, P.yellow);
+    c.rect(8, 132, 136, 134, P.ink);
+    c.outline(8, 50, 136, 129);
+  });
+}
+function siteOffice() {
+  return site((c) => {
+    const wall = [94, 127, 163, 255];
+    c.rect(16, 24, 128, 128, wall);
+    c.rect(16, 24, 128, 32, P.ink2);
+    for (let row = 0; row < 2; row++)
+      for (let col = 0; col < 3; col++) {
+        const wx = 24 + col * 34,
+          wy = 40 + row * 30;
+        c.rect(wx, wy, wx + 24, wy + 20, P.ink);
+        c.rect(wx + 2, wy + 2, wx + 22, wy + 18, P.glass);
+        c.rect(wx + 2, wy + 2, wx + 10, wy + 8, P.glassLit);
+      }
+    c.rect(28, 100, 116, 118, P.yellow);
+    c.rect(28, 100, 116, 103, P.slabLit);
+    c.outline(27, 99, 117, 119);
+    c.rect(56, 108, 88, 128, P.ink);
+    c.rect(59, 111, 85, 128, [159, 211, 234, 255]);
+    c.rect(71, 111, 73, 128, P.ink);
+    c.rect(52, 128, 92, 134, P.slab);
+    c.outline(52, 127, 92, 135);
+    c.outline(16, 24, 128, 129);
+  });
+}
+
+/** Sales: blue glass, a wide window band, a teal roofline. */
+function siteOfficeSales() {
+  return site((c) => {
+    const wall = [94, 127, 163, 255];
+    c.rect(16, 28, 128, 128, wall);
+    c.rect(12, 20, 132, 30, P.teal);
+    c.rect(12, 20, 132, 23, [66, 150, 144, 255]);
+    c.outline(12, 20, 132, 31);
+    c.rect(22, 38, 122, 62, P.ink);
+    c.rect(24, 40, 120, 60, P.glass);
+    c.rect(24, 40, 60, 48, P.glassLit);
+    for (const x of [56, 88]) c.rect(x, 40, x + 2, 60, P.ink);
+    for (let col = 0; col < 3; col++) {
+      const wx = 24 + col * 34;
+      c.rect(wx, 70, wx + 24, 90, P.ink);
+      c.rect(wx + 2, 72, wx + 22, 88, P.glass);
+    }
+    c.rect(28, 100, 116, 118, P.yellow);
+    c.rect(28, 100, 116, 103, P.slabLit);
+    c.outline(27, 99, 117, 119);
+    c.rect(56, 108, 88, 128, P.ink);
+    c.rect(59, 111, 85, 128, [159, 211, 234, 255]);
+    c.rect(71, 111, 73, 128, P.ink);
+    c.rect(52, 128, 92, 134, P.slab);
+    c.outline(52, 127, 92, 135);
+    c.outline(16, 28, 128, 129);
+  });
+}
+/** Finance: a sandstone bank with columns and a pediment. */
+function siteOfficeFinance() {
+  return site((c) => {
+    const sand = [219, 202, 169, 255];
+    const sandDark = [192, 158, 128, 255];
+    c.rect(14, 44, 130, 128, sand);
+    for (let y = 48; y < 128; y += 10) c.rect(14, y, 130, y + 1, sandDark);
+    for (let i = 0; i < 18; i++) c.rect(22 + i * 3, 44 - i, 122 - i * 3, 45 - i, sand);
+    for (let i = 0; i < 18; i++) {
+      c.set(22 + i * 3, 44 - i, P.ink);
+      c.set(23 + i * 3, 44 - i, P.ink);
+      c.set(121 - i * 3, 44 - i, P.ink);
+      c.set(122 - i * 3, 44 - i, P.ink);
+    }
+    c.rect(22, 44, 122, 46, P.ink);
+    for (const cx of [24, 46, 90, 112]) {
+      c.rect(cx, 52, cx + 8, 128, [235, 228, 210, 255]);
+      c.rect(cx + 6, 52, cx + 8, 128, sandDark);
+      c.outline(cx, 52, cx + 8, 129);
+      c.rect(cx - 2, 50, cx + 10, 54, sandDark);
+    }
+    c.rect(56, 92, 88, 110, P.yellow);
+    c.rect(56, 92, 88, 95, P.slabLit);
+    c.outline(55, 91, 89, 111);
+    c.rect(58, 60, 86, 84, P.ink);
+    c.rect(61, 63, 83, 81, P.glass);
+    c.rect(60, 112, 84, 128, P.ink);
+    c.rect(63, 115, 81, 128, [64, 52, 46, 255]);
+    c.rect(71, 115, 73, 128, P.ink);
+    c.rect(48, 128, 96, 134, P.slab);
+    c.outline(48, 127, 96, 135);
+    c.outline(14, 44, 130, 129);
+  });
+}
+/** Operations: a steel-clad block with a red band and a rooftop unit. */
+function siteOfficeOperations() {
+  return site((c) => {
+    c.rect(14, 36, 130, 128, P.steelDark);
+    for (let x = 16; x < 130; x += 6) c.rect(x, 40, x + 3, 128, P.steel);
+    c.rect(14, 36, 130, 40, P.ink2);
+    c.rect(96, 26, 122, 36, P.stoneDark);
+    c.outline(96, 26, 122, 37);
+    c.rect(100, 20, 104, 26, P.ink2);
+    c.rect(14, 62, 130, 72, P.red);
+    c.rect(14, 62, 130, 64, [210, 120, 90, 255]);
+    for (const wy of [44, 78]) {
+      for (let col = 0; col < 3; col++) {
+        const wx = 24 + col * 34;
+        c.rect(wx, wy, wx + 24, wy + 14, P.ink);
+        c.rect(wx + 2, wy + 2, wx + 22, wy + 12, P.glass);
+      }
+    }
+    c.rect(28, 96, 116, 112, P.yellow);
+    c.rect(28, 96, 116, 99, P.slabLit);
+    c.outline(27, 95, 117, 113);
+    c.rect(56, 108, 88, 128, P.ink);
+    c.rect(59, 111, 85, 128, [159, 211, 234, 255]);
+    c.rect(71, 111, 73, 128, P.ink);
+    c.rect(52, 128, 92, 134, P.slab);
+    c.outline(52, 127, 92, 135);
+    c.outline(14, 36, 130, 129);
+  });
+}
+
 // ── PNG ──
 let T = null;
 const crc32 = (buf) => {
@@ -475,3 +955,16 @@ save("props.png", props);
 writeFileSync(join(OUT, "props.json"), JSON.stringify(frames, null, 2));
 save("building_castle.png", castle());
 save("building_office.png", office());
+save("building_supply.png", supply());
+save("building_blocks.png", blocks());
+save("building_campus.png", campus());
+save("site_warehouse.png", siteWarehouse());
+save("site_store.png", siteStore());
+save("site_garage.png", siteGarage());
+save("site_office.png", siteOffice());
+save("site_office_sales.png", siteOfficeSales());
+save("site_office_finance.png", siteOfficeFinance());
+save("site_office_operations.png", siteOfficeOperations());
+save("van_96x144.png", van());
+save("asphalt_48.png", asphalt());
+save("pond_288x192.png", pond());

@@ -47,7 +47,7 @@ export default function ElevatorModal() {
     const address = addressFromLocation(window.location);
     if (!address) return;
     let live = true;
-    void fetchPeople(address.tenant.slug).then((found) => {
+    void fetchPeople(address.tenant.org).then((found) => {
       if (live) setPeople(found);
     });
     return () => {

@@ -18,7 +18,7 @@
  */
 
 import { floorRoomSlug, parseRoomPath } from "../rooms";
-import { TENANTS, tenantFor, type Tenant } from "./tenants";
+import { ORGANISATIONS, hasFloors, tenantFor, type Tenant } from "./tenants";
 import { residentsOf } from "./residents";
 
 export type Level = 1 | 2;
@@ -71,7 +71,7 @@ export interface Person extends Occupant {
 
 /** Who has a desk on each floor of a building. */
 export interface Occupancy {
-  /** The building's people, from the register. */
+  /** The organisation's people, from the register. */
   people: Occupant[];
 }
 
@@ -99,7 +99,7 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
     {
       floor: AGENTS_FLOOR,
       label: floorTitle(AGENTS_FLOOR),
-      names: residentsOf(tenant.slug).map((r) => r.name),
+      names: residentsOf(tenant.org).map((r) => r.name),
     },
   ];
 }
@@ -108,12 +108,12 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
 export function occupantsOf(tenant: Tenant, floor: Floor, occupancy: Occupancy): Occupant[] {
   if (floor.kind === "lobby") return [];
   if (floor.level === 1) return occupancy.people;
-  return residentsOf(tenant.slug).map((r) => ({ id: r.id, name: r.name }));
+  return residentsOf(tenant.org).map((r) => ({ id: r.id, name: r.name }));
 }
 
-/** What the top bar says about where you are. */
+/** What the top bar says about where you are: the floor, or nothing for a room with none. */
 export function describeFloor(address: Address): string {
-  return floorTitle(address.floor);
+  return hasFloors(address.tenant) ? floorTitle(address.floor) : "";
 }
 
 export interface ElevatorStop extends FloorStop {
@@ -131,14 +131,18 @@ export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorS
   }));
 }
 
-/** The map a floor is drawn from. */
+/**
+ * The map a room is drawn from: a store, warehouse or garage has its own; a
+ * lobby with a game has its own; any other lobby the shared one.
+ */
 export function mapFileFor(address: Address | null): string {
   if (!address) return "/maps/office3.json";
   if (address.floor.kind === "floor") return "/maps/floor.json";
-  return `/maps/lobby-${address.tenant.slug}.json`;
+  if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;
+  return address.tenant.game ? `/maps/lobby-${address.tenant.slug}.json` : "/maps/lobby.json";
 }
 
-/** Whether a building slug names a building someone can call home. */
+/** Whether a slug names an organisation someone can call home. */
 export function isHome(slug: string | null | undefined): slug is string {
-  return TENANTS.some((t) => t.slug === slug);
+  return ORGANISATIONS.some((o) => o.slug === slug);
 }

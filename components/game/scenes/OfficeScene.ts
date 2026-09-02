@@ -26,6 +26,8 @@ import {
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { WHITEBOARD } from "@/lib/map/office";
+import { hasCampus, hasFloors, tenantFor } from "@/lib/world/tenants";
+import { GARAGE_BAYS } from "@/lib/map/premises";
 import { fetchPeople } from "@/lib/people-client";
 import { ensureSheet } from "../utils/sheets";
 import { createLogger } from "@/lib/logger";
@@ -151,6 +153,7 @@ export class OfficeScene extends Phaser.Scene {
     // a lift car is, and the same five-frame format as the swing door.
     this.load.image("pingpong-table", "/sprites/pingpong_table_96x72.png");
     this.load.image("pinball-machine", "/sprites/pinball_machine_96x120.png");
+    this.load.image("van", "/sprites/world/van_96x144.png");
     this.load.spritesheet("anim-elevator", "/sprites/animated_elevator_96x144.png", {
       frameWidth: 96,
       frameHeight: 144,
@@ -239,30 +242,39 @@ export class OfficeScene extends Phaser.Scene {
     const address = addressFromLocation(window.location);
     if (address?.floor.kind === "floor") void this.furnishFloor(address, map, collisionRects);
 
-    // Arriving by lift or by the door: start in the doorway and walk out of
-    // it, rather than appear at the desk. The doorway's latch is not stepped
-    // while the walk holds the keys, so standing in it does not fire it.
+    // Arriving by a doorway — the lift, the front door, the door from the
+    // room next door: start in it and walk out of it, rather than appear at
+    // the desk. The doorway's latch is not stepped while the walk holds the
+    // keys, so standing in it does not fire it.
     this.arrival.reset();
     const via = new URLSearchParams(window.location.search).get("via");
     const zones = parseTransitions(map);
-    if (via === "elevator") {
-      const lift = zones.find((zone) => zone.name === "elevator");
-      if (lift) {
-        // The zone's top row is the floor in front of the car; stand in it.
-        this.player.sprite.setPosition(lift.x + lift.width / 2, lift.y + 24 - BODY_BELOW_CENTRE);
-        this.arrival.begin("up", ARRIVAL_STEPS);
-      }
-    } else if (via === "door") {
-      const door = zones.find((zone) => zone.name === "door");
-      if (door) {
-        // Just inside, on the floor below the doorway, and walk in.
-        this.player.sprite.setPosition(
-          door.x + door.width / 2,
-          door.y + door.height + 24 - BODY_BELOW_CENTRE,
-        );
-        this.arrival.begin("down", ARRIVAL_STEPS);
+    const arrivedBy = via ? zones.find((zone) => zone.name === via) : undefined;
+    if (arrivedBy?.name === "elevator") {
+      // The zone's top row is the floor in front of the car; stand in it.
+      this.player.sprite.setPosition(
+        arrivedBy.x + arrivedBy.width / 2,
+        arrivedBy.y + 24 - BODY_BELOW_CENTRE,
+      );
+      this.arrival.begin("up", ARRIVAL_STEPS);
+    } else if (arrivedBy) {
+      // Just inside, on the floor below the doorway, and walk in.
+      this.player.sprite.setPosition(
+        arrivedBy.x + arrivedBy.width / 2,
+        arrivedBy.y + arrivedBy.height + 24 - BODY_BELOW_CENTRE,
+      );
+      this.arrival.begin("down", ARRIVAL_STEPS);
+    }
+    // Doors to the rooms next door say where they go.
+    for (const zone of zones) {
+      if (
+        zone.target.startsWith("room:") ||
+        (zone.name === "door" && !hasFloors(address?.tenant ?? tenantFor("")!))
+      ) {
+        this.addDoorSign(zone);
       }
     }
+    if (address && address.tenant.kind === "garage") this.parkVans(collisionGroup);
 
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
     this.player.sprite.setCollideWorldBounds(true);
@@ -297,6 +309,7 @@ export class OfficeScene extends Phaser.Scene {
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
+    gameEvents.emit("place-changed", null);
 
     // ── Systems ───────────────────────────────────────────
     this.cameraController = new CameraController(
@@ -367,6 +380,13 @@ export class OfficeScene extends Phaser.Scene {
 
     // Out through the door is the world map; the lift offers the floors.
     const unsubDoor = gameEvents.on("transition-entered", (name, target) => {
+      // A door into the room next door: its page, arriving at the matching door there.
+      if (target.startsWith("room:")) {
+        const [, slug, door] = target.split(":");
+        log.info(`through the ${name} to ${slug}`);
+        window.location.assign(`/r/${slug}?via=${door}`);
+        return;
+      }
       if (target === "elevator") {
         this.elevatorOpen = true;
         // Opened by walking in with a direction held; that direction must
@@ -381,7 +401,13 @@ export class OfficeScene extends Phaser.Scene {
       }
       const from = roomFromLocation(window.location);
       log.info(`leaving ${from} by the ${name}`);
-      this.scene.start("WorldScene", { from });
+      // A store's or campus's lobby opens onto its yard; a head office onto the world.
+      const tenant = tenantFor(from);
+      if (tenant && hasCampus(tenant.org)) {
+        this.scene.start("CampusScene", { campus: tenant.org, from });
+      } else {
+        this.scene.start("WorldScene", { from });
+      }
     });
 
     // Put on whatever was chosen last time, so a look survives a reload.
@@ -521,9 +547,48 @@ export class OfficeScene extends Phaser.Scene {
     );
   }
 
+  /** What a doorway in the top wall leads to, lettered above it. */
+  private addDoorSign(zone: { name: string; target: string; x: number; y: number; width: number }) {
+    const label =
+      zone.target === "world"
+        ? "EXIT"
+        : (tenantFor(zone.target.split(":")[1])?.location ?? zone.name).toUpperCase();
+    this.add
+      .text(zone.x + zone.width / 2, zone.y + 30, label, {
+        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
+        fontSize: "9px",
+        color: "#ffe9a8",
+        backgroundColor: "rgba(27,27,42,0.85)",
+        padding: { x: 5, y: 2 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(12)
+      .setResolution(2);
+  }
+
+  /** The field crew's vans, in their bays, solid. */
+  private parkVans(collisionGroup: Phaser.Physics.Arcade.StaticGroup) {
+    if (!this.textures.exists("van")) return;
+    for (const bay of GARAGE_BAYS) {
+      this.add.image(bay.x, bay.y, "van").setOrigin(0, 0).setDepth(4);
+      const body = collisionGroup.create(
+        bay.x + 48,
+        bay.y + 72,
+        undefined,
+        undefined,
+        false,
+      ) as Phaser.Physics.Arcade.Sprite;
+      body.body!.setSize(88, 130);
+      body.setVisible(false);
+      (body.body as Phaser.Physics.Arcade.StaticBody).enable = true;
+    }
+  }
+
   /** The tenant's name and where you are, lettered on the top wall between the door and the board. */
   private addWallSign(address: Address) {
-    const x = 6 * 48;
+    // Between the door and the board in a lobby; right of the shop window
+    // in a store, warehouse or garage.
+    const x = hasFloors(address.tenant) ? 6 * 48 : 17 * 48;
     this.add
       .text(x, 94, address.tenant.name.toUpperCase(), {
         fontFamily: '"ArkPixel", "Press Start 2P", monospace',
@@ -534,11 +599,16 @@ export class OfficeScene extends Phaser.Scene {
       .setDepth(3)
       .setResolution(2);
     this.add
-      .text(x, 100, describeFloor(address).toUpperCase(), {
-        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "11px",
-        color: "#565972",
-      })
+      .text(
+        x,
+        100,
+        [address.tenant.location, describeFloor(address)].filter(Boolean).join(" · ").toUpperCase(),
+        {
+          fontFamily: '"ArkPixel", "Press Start 2P", monospace',
+          fontSize: "11px",
+          color: "#565972",
+        },
+      )
       .setOrigin(0.5, 0)
       .setDepth(3)
       .setResolution(2);

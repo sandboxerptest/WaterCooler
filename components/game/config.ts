@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { OfficeScene } from "./scenes/OfficeScene";
 import { WorldScene } from "./scenes/WorldScene";
+import { CampusScene } from "./scenes/CampusScene";
 import { GAME_WIDTH, GAME_HEIGHT } from "@/lib/constants";
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
@@ -10,7 +11,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   pixelArt: true,
   antialias: false,
   roundPixels: true,
-  scene: [OfficeScene, WorldScene],
+  scene: [OfficeScene, WorldScene, CampusScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.NO_CENTER,

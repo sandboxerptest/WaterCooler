@@ -76,6 +76,8 @@ export interface GameEventMap {
   "open-elevator": [];
   /** The lift's menu closed, chosen or not; the keys are the character's again. */
   "elevator-closed": [];
+  /** Where the player is, for the top bar, when it is not the room in the URL: a campus, the world map. Null means the room. */
+  "place-changed": [label: string | null];
   /**
    * The person chose a different look for themselves. The sheet is fetched
    * and the texture swapped in the scene; nothing about the world changes.

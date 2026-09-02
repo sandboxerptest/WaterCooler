@@ -11,7 +11,7 @@ import { textureKeyFor, type RosterCharacter } from "@/lib/characters/library";
 import { isComplete, profileSnapshot, saveProfile, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
 import { addressFromLocation } from "@/lib/world/floors";
-import { TENANTS, tenantFor, tenantUrl } from "@/lib/world/tenants";
+import { ORGANISATIONS, tenantUrl, tenantsOf } from "@/lib/world/tenants";
 
 const PORTRAIT_SCALE = 1.5;
 const NAME_LIMIT = 16;
@@ -39,7 +39,7 @@ export default function Welcome() {
   useEffect(() => {
     if (!done || !profile?.home) return;
     if (!addressFromLocation(window.location)) {
-      window.location.replace(tenantUrl(tenantFor(profile.home)!));
+      window.location.replace(tenantUrl(tenantsOf(profile.home)[0]));
     }
   }, [done, profile]);
 
@@ -59,8 +59,8 @@ export default function Welcome() {
     await registerProfile(profileSnapshot());
     const here = addressFromLocation(window.location);
     // The room socket sends the name when it joins, so arrive cleanly.
-    if (here?.tenant.slug === home) window.location.reload();
-    else window.location.assign(tenantUrl(tenantFor(home)!));
+    if (here?.tenant.org === home) window.location.reload();
+    else window.location.assign(tenantUrl(tenantsOf(home)[0]));
   };
 
   return createPortal(
@@ -97,16 +97,16 @@ export default function Welcome() {
         <section className="welcome__step">
           <div className="welcome__label">Your home office</div>
           <div className="welcome__homes">
-            {TENANTS.map((tenant) => (
+            {ORGANISATIONS.map((company) => (
               <button
-                key={tenant.slug}
+                key={company.slug}
                 type="button"
-                className={`welcome-home${home === tenant.slug ? " welcome-home--chosen" : ""}`}
-                onClick={() => setHome(tenant.slug)}
-                aria-pressed={home === tenant.slug}
+                className={`welcome-home${home === company.slug ? " welcome-home--chosen" : ""}`}
+                onClick={() => setHome(company.slug)}
+                aria-pressed={home === company.slug}
               >
-                <span className="welcome-home__name">{tenant.name}</span>
-                <span className="welcome-home__tagline">{tenant.tagline}</span>
+                <span className="welcome-home__name">{company.name}</span>
+                <span className="welcome-home__tagline">{company.tagline}</span>
               </button>
             ))}
           </div>

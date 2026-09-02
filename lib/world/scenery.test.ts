@@ -25,6 +25,7 @@ describe("ground", () => {
     for (let y = 1; y < WORLD_ROWS; y++)
       for (let x = 0; x < WORLD_COLUMNS; x++) {
         if (tiles[y][x] === "kerb") expect(tiles[y - 1][x]).toBe("grass");
+        if (tiles[y][x] === "asphalt") continue;
         const underBuilding = BUILDINGS.some(
           (b) =>
             x * TILE >= b.frame.x &&
@@ -32,7 +33,8 @@ describe("ground", () => {
             (y - 1) * TILE < b.frame.y + b.frame.height &&
             (y - 1) * TILE >= b.frame.y,
         );
-        if (tiles[y][x] === "paving" && !underBuilding) expect(tiles[y - 1][x]).not.toBe("grass");
+        if (tiles[y][x] === "paving" && !underBuilding && tiles[y - 1][x] !== "asphalt")
+          expect(tiles[y - 1][x]).not.toBe("grass");
       }
   });
 
@@ -41,8 +43,8 @@ describe("ground", () => {
       const col = Math.floor((b.door.x + b.door.width / 2) / TILE);
       // The door zone straddles the building's last row and the path's first.
       const from = Math.floor((b.door.y + b.door.height - 1) / TILE);
-      expect(tiles[from][col]).toBe("paving");
-      for (let y = from; y < WORLD_ROWS - 2; y++) expect(tiles[y][col]).not.toBe("grass");
+      expect(tiles[from][col], `${b.org.slug} door`).toBe("paving");
+      for (let y = from; y < 18; y++) expect(tiles[y][col]).not.toBe("grass");
     }
     expect(tiles[Math.floor(WORLD_SPAWN.y / TILE)][Math.floor(WORLD_SPAWN.x / TILE)]).not.toBe(
       "grass",
