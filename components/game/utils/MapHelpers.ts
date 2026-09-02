@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import type { DoorZone } from "@/lib/doors";
 import { FRAME_WIDTH, FRAME_HEIGHT, SHEET_COLUMNS, type Direction } from "../config/animations";
 import { exteriorRects } from "@/lib/map-perimeter";
 
@@ -91,6 +92,37 @@ export function parsePOIs(map: Phaser.Tilemaps.Tilemap): POIDef[] {
     }
   }
   return pois;
+}
+
+/**
+ * Doorways out of the room, read from the map's "transitions" layer.
+ *
+ * Each carries the scene it leads to, so adding a room becomes a change to the
+ * map spec rather than to this code. A transition with no target is skipped —
+ * a door that leads nowhere is decoration, and should not swallow the player.
+ */
+export function parseTransitions(map: Phaser.Tilemaps.Tilemap): DoorZone[] {
+  const layer = map.getObjectLayer("transitions");
+  if (!layer) return [];
+
+  const zones: DoorZone[] = [];
+  for (const obj of layer.objects) {
+    const props = obj.properties as Array<{ name: string; value: string }> | undefined;
+    const target = props?.find((p) => p.name === "target")?.value;
+    const facing = props?.find((p) => p.name === "facing")?.value as DoorZone["facing"];
+    if (!obj.name || !target) continue;
+    if (typeof obj.x !== "number" || typeof obj.y !== "number") continue;
+    zones.push({
+      name: obj.name,
+      target,
+      x: obj.x,
+      y: obj.y,
+      width: obj.width ?? 0,
+      height: obj.height ?? 0,
+      facing,
+    });
+  }
+  return zones;
 }
 
 /**
