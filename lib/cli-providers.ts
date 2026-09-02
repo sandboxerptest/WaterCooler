@@ -376,7 +376,8 @@ const mettaraProvider: CliProvider = {
   kind: "service",
   displayName: "Mettara AI",
   usesWorkspaces: false,
-  setupHint: "Set METTARA_API_SECRET and METTARA_PLATFORM_ID, and install the Mettara SDK tarball.",
+  setupHint:
+    "Set METTARA_API_SECRET and METTARA_PLATFORM_ID, and put the Mettara SDK in vendor/mettara-lib.",
 
   preflight() {
     return mettaraPreflight();

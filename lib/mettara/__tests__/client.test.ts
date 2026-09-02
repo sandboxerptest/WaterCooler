@@ -37,7 +37,10 @@ function fakeSdk() {
       }
     },
     MettaraClient: class {
-      constructor(public options: { apiKey: string }) {}
+      constructor(
+        public apiKey: string,
+        public baseUrl?: string,
+      ) {}
       async createConversation(_group: string, _user: string, ai: string) {
         created.push(ai);
         return { id: `conv-${created.length}` };
@@ -64,16 +67,27 @@ afterEach(() => {
   process.env = { ...ENV };
 });
 
+describe("where the SDK is pointed", () => {
+  it("adds the gateway's prefixes to the plain host", async () => {
+    const { apiBase, embedBase } = await import("../client");
+    expect(apiBase({ baseUrl: "https://api.mettara.ai" })).toBe("https://api.mettara.ai/api");
+    expect(embedBase({ baseUrl: "https://api.mettara.ai/" })).toBe("https://api.mettara.ai/api/v1");
+  });
+});
+
 describe("mettara client", () => {
-  it("resolves to null rather than throwing when the SDK is absent", async () => {
-    await expect(loadSdk()).resolves.toBeNull();
+  it("loads the vendored SDK, with both clients", async () => {
+    const sdk = await loadSdk();
+    expect(typeof sdk?.EmbedClient).toBe("function");
+    expect(typeof sdk?.MettaraClient).toBe("function");
   });
 
   it("explains how to install the SDK instead of failing opaquely", async () => {
     configure();
+    setSdkLoader(async () => null);
     await expect(
       runMettaraTurn({ sessionKey: "s", message: "hi", personality: "You are Sam." }),
-    ).rejects.toThrow(/npm install \.\/mettara-nodejs/);
+    ).rejects.toThrow(/vendor\/mettara-lib/);
   });
 
   it("refuses to run when the server has no credentials", async () => {

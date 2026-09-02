@@ -17,6 +17,15 @@ import {
   validateDispatchSecret,
 } from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
+import { getRoomStore } from "./lib/server/room-store";
+import {
+  offeredProviders,
+  providerBlocked,
+  registerProviderSwitch,
+  rememberProvider,
+  rememberedProvider,
+} from "./lib/server/provider-choice";
+import { getBridgeProvider, setBridgeProvider } from "./lib/cli-bridge";
 import { attachPresenceSocket } from "./lib/server/presence-socket";
 import { ERP_DB_PATH, isEmpty, openErpDb, seedErpDatabase } from "./lib/erp/db";
 import { DEFAULT_ROOM_SLUG } from "./lib/rooms";
@@ -37,6 +46,12 @@ loadEnvConfig(process.cwd(), dev);
 
 const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "claude";
 const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER) ? getCliProvider(AGENT_PROVIDER) : null;
+// The agents boot on the Claude implementation — the CLI, or the API-keyed
+// CLI where AGENT_PROVIDER says so — and Mettara is a switch away in the
+// HUD. AGENT_PROVIDER=mettara only says Mettara is wanted; the HUD's choice,
+// remembered in the room database, is what actually picks it.
+const DEFAULT_PROVIDER =
+  CLI_PROVIDER && CLI_PROVIDER.id !== "mettara" ? CLI_PROVIDER : getCliProvider("claude");
 // Expose provider to Next.js client code (compiled on-demand in dev)
 process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
 
@@ -175,12 +190,30 @@ app
     attachPresenceSocket(server);
 
     if (CLI_PROVIDER) {
-      attachCliBridge(server, CLI_PROVIDER);
+      attachCliBridge(server, DEFAULT_PROVIDER);
+      // The HUD may have switched the agents to another AI before; come
+      // back on it, and let it switch again.
+      const defaultId = DEFAULT_PROVIDER.id;
+      const remembered = rememberedProvider(getRoomStore(), defaultId);
+      if (remembered && remembered !== defaultId) setBridgeProvider(getCliProvider(remembered));
+      registerProviderSwitch({
+        defaultId,
+        active: () => getBridgeProvider().id,
+        async switchTo(id) {
+          if (!offeredProviders(defaultId).includes(id))
+            return "That provider is not offered here.";
+          const blocked = await providerBlocked(id);
+          if (blocked) return blocked;
+          if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));
+          rememberProvider(getRoomStore(), id);
+          return null;
+        },
+      });
       log.info(`Ready on http://localhost:${port}`);
       log.info(
-        CLI_PROVIDER.kind === "service"
-          ? `Provider: ${CLI_PROVIDER.displayName} (hosted service)`
-          : `Provider: ${CLI_PROVIDER.displayName} (bridging via ${CLI_PROVIDER.binName} CLI)`,
+        DEFAULT_PROVIDER.kind === "service"
+          ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
+          : `Provider: ${DEFAULT_PROVIDER.displayName} (bridging via ${DEFAULT_PROVIDER.binName} CLI)`,
       );
       if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
     } else {

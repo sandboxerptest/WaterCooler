@@ -47,3 +47,7 @@ next-env.d.ts
 
 # Generated company data
 .data/
+
+# Mettara SDK: only the Node library is used; the C# packages beside it stay local
+vendor/mettara-lib/*.nupkg
+vendor/mettara-lib/*.tar.gz

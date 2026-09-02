@@ -47,6 +47,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
     "@next/env": "16.1.6",
+    "mettara-lib": "link:vendor/mettara-lib",
     "next-auth": "5.0.0-beta.32",
     "ws": "^8.19.0"
   },

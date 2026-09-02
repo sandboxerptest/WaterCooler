@@ -1,0 +1,7 @@
+{
+  "name": "mettara-lib",
+  "version": "1.0.2",
+  "private": true,
+  "description": "Mettara Connect SDK, vendored. The .cjs is what the server loads; the .ts is the source.",
+  "main": "mettara-lib.cjs"
+}

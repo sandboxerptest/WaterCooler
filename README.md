@@ -176,9 +176,9 @@ There is no binary to install and no sandbox directory — a turn is an API call
 It needs two credentials on the server and the Mettara SDK, which is
 distributed as a tarball rather than from the public npm registry:
 
-```bash
-npm install ./mettara-nodejs-<version>.tgz
-```
+The SDK is not on npm: put Mettara's Node library in `vendor/mettara-lib/` as
+`mettara-lib.cjs` (the `.cjs` name matters; see the README there) and run
+`pnpm install` once. The image copies that folder, so a deploy carries it.
 
 ```bash
 cat >> .env.local <<'ENV'          # gitignored; never commit these
@@ -217,6 +217,16 @@ clock skew, nonce replay, then the HMAC-SHA256 signature over
 `METHOD\npath\ntimestamp\nnonce\nbase64(SHA256(body))`. A forged request never
 consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
 is not mounted at all when there is no secret to verify against.
+
+### Switching the agents between Claude and Mettara
+
+The server boots on `AGENT_PROVIDER` — the Claude CLI unless told otherwise —
+and that stays the default. The HUD's connection panel offers a switch between
+that Claude implementation and Mettara: disconnect, pick the other, and it
+connects to it. The choice is kept in the room database, so a restart comes
+back on it. Mettara is refused, with the reason in the panel, until its keys
+are set and its SDK is installed. Conversations do not carry across: a seat
+starts a fresh thread on the AI it switched to.
 
 ### Signing in with Google or Microsoft
 

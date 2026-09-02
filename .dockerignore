@@ -6,3 +6,5 @@ node_modules
 .claude
 *.log
 .env*.local
+vendor/mettara-lib/*.nupkg
+vendor/mettara-lib/*.tar.gz

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStudio } from "@/lib/store";
+import { chooseProvider, fetchProviders, type ProviderState } from "@/lib/provider-client";
+import type { CliProviderId } from "@/lib/cli-providers";
 import { LS_CONFIG, STATUS_LABELS } from "@/lib/constants";
 import {
   parseGatewayAddress,
@@ -43,6 +45,39 @@ export default function ConnectionPanel() {
 
   const [error, setError] = useState("");
 
+  // Which AI the agents run on, and what else they could: the server says.
+  const [providers, setProviders] = useState<ProviderState | null>(null);
+  const [switching, setSwitching] = useState(false);
+  useEffect(() => {
+    if (!IS_CLI) return;
+    let live = true;
+    void fetchProviders().then((state) => {
+      if (live) setProviders(state);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const activeLabel =
+    providers?.choices.find((c) => c.id === providers.active)?.label ?? PROVIDER_LABEL;
+
+  /** Switch the agents to another AI, then connect to it. Only while disconnected. */
+  const handleChoose = async (id: CliProviderId) => {
+    if (!providers || isConnected || isConnecting) return;
+    setError("");
+    if (id !== providers.active) {
+      setSwitching(true);
+      const { state, refused } = await chooseProvider(id);
+      if (state) setProviders(state);
+      setSwitching(false);
+      if (refused) {
+        setError(refused);
+        return;
+      }
+    }
+    connect({ url: parseGatewayAddress("") ?? "", token: "" });
+  };
+
   const handleConnect = () => {
     setError("");
     if (IS_CLI) {
@@ -69,9 +104,42 @@ export default function ConnectionPanel() {
   return (
     <HudFlyout
       title="Connection"
-      subtitle={`${STATUS_LABELS[state.connection]}${IS_CLI ? ` (${PROVIDER_LABEL})` : " gateway link"}`}
+      subtitle={`${STATUS_LABELS[state.connection]}${IS_CLI ? ` (${activeLabel})` : " gateway link"}`}
     >
       <div className="hud-panel__stack">
+        {IS_CLI && providers && providers.choices.length > 1 && (
+          <>
+            <label className="hud-panel__label">Agents run on</label>
+            <div className="hud-panel__choices" role="radiogroup" aria-label="Agent provider">
+              {providers.choices.map((choice) => {
+                const active = choice.id === providers.active;
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`pixel-button hud-choice${active ? " hud-choice--active" : ""}`}
+                    onClick={() => void handleChoose(choice.id)}
+                    disabled={isConnected || isConnecting || switching}
+                    title={
+                      choice.blocked ??
+                      (choice.id === providers.default ? "The default" : choice.hint)
+                    }
+                  >
+                    {choice.label}
+                    {active ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+            {(isConnected || isConnecting) && (
+              <p style={{ color: "var(--pixel-muted)", fontSize: "8px" }}>
+                Disconnect to switch the agents to another AI.
+              </p>
+            )}
+          </>
+        )}
         {!IS_CLI && (
           <>
             <label className="hud-panel__label">Gateway URL</label>
@@ -103,7 +171,8 @@ export default function ConnectionPanel() {
         )}
         {IS_CLI && !isConnected && !isConnecting && (
           <p style={{ color: "var(--pixel-muted)", fontSize: "8px" }}>
-            Using {PROVIDER_LABEL} as agent provider. {SETUP_HINT}
+            Using {activeLabel} as agent provider.{" "}
+            {providers?.choices.find((c) => c.id === providers.active)?.hint ?? SETUP_HINT}
           </p>
         )}
         {isAuthFailed && !error && (

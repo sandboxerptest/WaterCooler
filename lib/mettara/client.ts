@@ -8,7 +8,7 @@
  * it ever reach this module.
  *
  * The SDK ships as a tarball rather than from the public npm registry
- * (`npm install ./mettara-nodejs-<version>.tgz`), so "not installed" is a
+ * (vendored under vendor/mettara-lib), so "not installed" is a
  * routine state that has to produce a readable sentence, not a stack trace.
  *
  * Docs: https://connect-a12e4c.gitlab.io/libraries/nodejs/
@@ -23,8 +23,8 @@ const log = createLogger("Mettara");
 export const SDK_PACKAGE = "mettara-lib";
 
 export const SDK_MISSING_MESSAGE =
-  `The Mettara SDK is not installed. Drop the tarball in the project root and run ` +
-  `"npm install ./mettara-nodejs-<version>.tgz", then restart the server.`;
+  "The Mettara SDK is not installed. Put mettara-lib.cjs in vendor/mettara-lib, " +
+  "run pnpm install, then restart the server.";
 
 /**
  * The slice of the SDK we depend on. Kept structural rather than imported so a
@@ -57,7 +57,11 @@ export interface Sdk {
       email: string,
     ): Promise<EmbedToken>;
   };
-  MettaraClient: new (options: { apiKey: string; baseUrl?: string }) => {
+  /** Takes the same raw platform API key as EmbedClient, then the base URL. */
+  MettaraClient: new (
+    apiKey: string,
+    baseUrl?: string,
+  ) => {
     createConversation(
       groupId: string,
       userId: string,
@@ -139,6 +143,21 @@ export interface MettaraReply {
 }
 
 /**
+ * Where the gateway mounts what the SDK asks for. The SDK builds
+ * `/v1/conversations…` and `/embed/token`; Mettara's API gateway serves them
+ * at `/api/v1/conversations…` and `/api/v1/embed/token` (see its
+ * /openapi.json). METTARA_BASE_URL stays the plain host; the prefixes are
+ * added here, one per client.
+ */
+export function apiBase(config: Pick<MettaraConfig, "baseUrl">): string {
+  return `${config.baseUrl.replace(/\/$/, "")}/api`;
+}
+
+export function embedBase(config: Pick<MettaraConfig, "baseUrl">): string {
+  return `${apiBase(config)}/v1`;
+}
+
+/**
  * Identity is per seat, so each worker holds its own thread of conversation on
  * Mettara's side. Tokens are cheap but not free; cache them for the life of
  * the process.
@@ -157,7 +176,7 @@ function identityFor(
 ): Promise<EmbedToken> {
   const cached = tokenCache.get(userId);
   if (cached) return cached;
-  const embed = new sdk.EmbedClient(config.apiSecret, config.baseUrl, config.platformId);
+  const embed = new sdk.EmbedClient(config.apiSecret, embedBase(config), config.platformId);
   const pending = embed
     .getToken(userId, config.groupId, config.groupName, displayName, `${userId}@watercooler.local`)
     .catch((err: unknown) => {
@@ -188,7 +207,7 @@ export async function runMettaraTurn(turn: MettaraTurn): Promise<MettaraReply> {
   const displayName = turn.seatLabel ?? "WaterCooler agent";
   const token = await identityFor(sdk, config, userId, displayName);
 
-  const client = new sdk.MettaraClient({ apiKey: config.apiSecret, baseUrl: config.baseUrl });
+  const client = new sdk.MettaraClient(config.apiSecret, apiBase(config));
 
   let conversationId = turn.conversationId;
   let opening = turn.message;

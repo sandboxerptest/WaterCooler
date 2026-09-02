@@ -11,6 +11,8 @@ RUN corepack enable
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The Mettara SDK is vendored, not on npm; it has to be here before install.
+COPY vendor ./vendor
 RUN pnpm install --frozen-lockfile
 
 # ── Build ──────────────────────────────────────────────

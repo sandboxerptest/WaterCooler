@@ -34,8 +34,23 @@ import {
 
 let log = createLogger("CLI Bridge");
 
-/** The active CLI provider. Replaced by attachCliBridge at startup. */
-let provider: CliProvider = getCliProvider("claude");
+/**
+ * The active CLI provider. Set by attachCliBridge at startup and swapped by
+ * setBridgeProvider when the HUD chooses another. A run reads it once, at
+ * its start, so a switch mid-run cannot mix two providers.
+ */
+let activeProvider: CliProvider = getCliProvider("claude");
+
+/** Swap the AI behind the bridge. Sessions are per provider, so nothing resumes across. */
+export function setBridgeProvider(next: CliProvider) {
+  activeProvider = next;
+  log = createLogger(`${next.displayName} Bridge`);
+  log.info(`agents now run on ${next.displayName}`);
+}
+
+export function getBridgeProvider(): CliProvider {
+  return activeProvider;
+}
 
 let runCounter = 0;
 
@@ -168,6 +183,7 @@ function atCapacity(): boolean {
 
 /** Reason this provider cannot run right now, or null when it is ready. */
 function providerBlocked(room: string): string | null {
+  const provider = activeProvider;
   const reason = provider.preflight?.() ?? null;
   if (reason) return reason;
 
@@ -329,6 +345,7 @@ const COMPANY_BRIEFING = [
 ].join(" ");
 
 function buildPersonality(room: string, params: Record<string, unknown>): string {
+  const provider = activeProvider;
   const label = params.seatLabel as string | undefined;
   const role = params.seatRole as string | undefined;
   if (!label && !role) {
@@ -342,6 +359,7 @@ function buildPersonality(room: string, params: Record<string, unknown>): string
 }
 
 function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
+  const provider = activeProvider;
   const sessionKey = (params.sessionKey as string) ?? "default";
   const message = (params.message as string) ?? "";
   const runId = `${provider.id}_${Date.now()}_${++runCounter}`;
@@ -383,7 +401,8 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   const runOptions = {
     message,
     personality: buildPersonality(state.room, params),
-    sessionId: state.sessionMap.get(sessionKey),
+    // A session belongs to the provider that opened it: the map is keyed by both.
+    sessionId: state.sessionMap.get(`${provider.id}:${sessionKey}`),
     // Attach the MCP server for worker dispatch if we have a roster
     mcpConfigPath: writeMcpConfig(state.room),
     model: (params.model as string | undefined) ?? process.env.WATERCOOLER_MODEL,
@@ -397,7 +416,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   // Both kinds of run end the same way, so the reporting — spend, activity,
   // achievements, session mapping, the final bubble — lives in one place.
   const finish = (parsed: CliParsedResult | null, failure: string | null) =>
-    finishRun({ state, params, runId, sessionKey, message, startedAt, parsed, failure });
+    finishRun({ provider, state, params, runId, sessionKey, message, startedAt, parsed, failure });
 
   // A service provider has no process to spawn: it answers in place.
   if (provider.kind === "service") {
@@ -539,6 +558,7 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
  * narrating it.
  */
 function finishRun(args: {
+  provider: CliProvider;
   state: ClientState;
   params: Record<string, unknown>;
   runId: string;
@@ -548,7 +568,7 @@ function finishRun(args: {
   parsed: CliParsedResult | null;
   failure: string | null;
 }) {
-  const { state, params, runId, sessionKey, message, startedAt, parsed } = args;
+  const { provider, state, params, runId, sessionKey, message, startedAt, parsed } = args;
 
   const fail = (error: string) => {
     log.error(`Run ${runId} failed: ${error}`);
@@ -588,7 +608,7 @@ function finishRun(args: {
 
   // Store the provider session id so the next message to this seat resumes it
   if (parsed.sessionId) {
-    state.sessionMap.set(sessionKey, parsed.sessionId);
+    state.sessionMap.set(`${provider.id}:${sessionKey}`, parsed.sessionId);
     log.debug(`Mapped sessionKey ${sessionKey} → ${provider.id} session ${parsed.sessionId}`);
   }
 
@@ -633,6 +653,7 @@ function handleChatAbort(state: ClientState, id: string, params: Record<string, 
 // ── Models list handler ────────────────────────────────
 
 async function handleModelsList(state: ClientState, id: string) {
+  const provider = activeProvider;
   const modelsCommand = provider.modelsCommand;
   if (!modelsCommand) {
     sendResponse(state, id, true, { models: provider.staticModels });
@@ -840,6 +861,7 @@ export function dispatchToWorker(
   task: string,
   room: string = DEFAULT_ROOM_SLUG,
 ): Promise<{ result: string; error?: string }> {
+  const provider = activeProvider;
   return new Promise((resolve) => {
     const seat = getWorkerRoster(room).find((w) => w.seatId === seatId);
     if (!seat) {
@@ -1090,8 +1112,8 @@ export function attachCliBridge(
   cliProvider: CliProvider,
   path = "/api/gateway",
 ) {
-  provider = cliProvider;
-  log = createLogger(`${provider.displayName} Bridge`);
+  activeProvider = cliProvider;
+  log = createLogger(`${activeProvider.displayName} Bridge`);
 
   const wss = new WebSocketServer({ noServer: true });
 
@@ -1140,6 +1162,7 @@ export function attachCliBridge(
 
   process.on("exit", cleanupMcpConfig);
 
+  const provider = activeProvider;
   log.info(
     provider.kind === "service"
       ? `${provider.displayName} bridge attached on ${path} (hosted service)`

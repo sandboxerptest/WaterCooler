@@ -14,6 +14,9 @@ importers:
       '@next/env':
         specifier: 16.1.6
         version: 16.1.6
+      mettara-lib:
+        specifier: link:vendor/mettara-lib
+        version: link:vendor/mettara-lib
       next-auth:
         specifier: 5.0.0-beta.32
         version: 5.0.0-beta.32(next@16.1.6(@babel/core@7.29.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)

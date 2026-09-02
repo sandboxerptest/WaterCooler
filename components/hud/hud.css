@@ -1610,3 +1610,20 @@
   background: var(--pixel-panel);
   vertical-align: middle;
 }
+
+/* ── Choosing what the agents run on ─────────────────── */
+
+.hud-panel__choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hud-choice {
+  flex: 1 1 auto;
+}
+
+.hud-choice--active {
+  border-color: var(--pixel-accent);
+  color: var(--pixel-accent);
+}
