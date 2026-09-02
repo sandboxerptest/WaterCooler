@@ -3,6 +3,7 @@
 import "./seat-manager.css";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { createLogger } from "@/lib/logger";
@@ -191,7 +192,9 @@ export default function SeatManagerModal({
       .map((s) => s.agentConfig!.agentId),
   );
 
-  return (
+  // Rendered into the body: the HUD layer is a stacking context capped at
+  // z-index 20, so in place this modal sits under the chat column at 30.
+  return createPortal(
     <div
       className="seat-manager-overlay"
       role="dialog"
@@ -276,6 +279,7 @@ export default function SeatManagerModal({
           providerLabel={PROVIDER_LABEL}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -67,6 +67,16 @@ export interface GameEventMap {
     },
   ];
   /** Someone said something out loud: show it over their character. */
+  /**
+   * The player walked into a doorway. `target` names the room it leads to;
+   * nothing loads it yet, so today this is how we prove the seam works.
+   */
+  "transition-entered": [name: string, target: string];
+  /**
+   * The person chose a different look for themselves. The sheet is fetched
+   * and the texture swapped in the scene; nothing about the world changes.
+   */
+  "player-sprite-chosen": [spriteKey: string, spritePath: string];
   "player-said": [playerId: string, text: string];
   /** This browser's own remark, to show over our own character. */
   "self-said": [text: string];

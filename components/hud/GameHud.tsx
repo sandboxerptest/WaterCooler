@@ -13,6 +13,8 @@ import BottomBar from "./BottomBar";
 import ConnectionPanel from "./ConnectionPanel";
 import WorkerPanel from "./WorkerPanel";
 import SeatManagerModal from "./SeatManagerModal";
+import CharacterStudio from "./CharacterStudio";
+import { Shirt } from "lucide-react";
 import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
 import NamePrompt from "./NamePrompt";
@@ -32,6 +34,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
   const bgm = useBgm();
   const [openPanel, setOpenPanel] = useState<HudPanelId | null>(null);
   const [seatManagerOpen, setSeatManagerOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => !loadOnboardingDone() && !loadGatewayConfig(),
   );
@@ -167,6 +170,19 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
         {/* Spacer pushes chat to right */}
         <div style={{ flex: "1 1 auto" }} />
 
+        {/* Choose which of the premade characters to play as */}
+        <div className="hud-chat-dock">
+          <button
+            type="button"
+            className={`hud-chat-dock__btn ${studioOpen ? "hud-chat-dock__btn--active" : ""}`}
+            onClick={() => setStudioOpen((open) => !open)}
+            title="Choose a character"
+          >
+            <Shirt size={22} aria-hidden />
+            <span className="hud-chat-dock__label">Character</span>
+          </button>
+        </div>
+
         {/* Chat lives in the column beside the office; this shows it again */}
         <div className="hud-chat-dock">
           <button
@@ -193,6 +209,8 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
         onClose={() => setSeatManagerOpen(false)}
         seats={state.seats}
       />
+
+      <CharacterStudio open={studioOpen} onClose={() => setStudioOpen(false)} />
 
       {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
     </div>

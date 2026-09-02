@@ -1,5 +1,12 @@
 import * as Phaser from "phaser";
-import { SPRITE_KEY, MOVE_SPEED, ALL_ANIMS, FRAME_WIDTH, FRAME_HEIGHT } from "../config/animations";
+import {
+  SPRITE_KEY,
+  MOVE_SPEED,
+  ALL_ANIMS,
+  FRAME_WIDTH,
+  FRAME_HEIGHT,
+  makeAnims,
+} from "../config/animations";
 import { ChatBubble } from "./ChatBubble";
 
 type Direction = "down" | "up" | "left" | "right";
@@ -12,6 +19,15 @@ export class Player {
   private arrow: Phaser.GameObjects.Sprite | null = null;
   private hasMovedOnce = false;
   private bubble: ChatBubble | null = null;
+  /**
+   * Prefix for this player's animation keys.
+   *
+   * The library characters were built before generated ones existed and use
+   * bare keys ("idle-down"); every other sheet namespaces its own ("ada:idle-
+   * down") so two characters on the same screen cannot share an animation.
+   * Empty means the original, unprefixed set.
+   */
+  private animPrefix = "";
 
   constructor(scene: Phaser.Scene, x: number, y: number, facing: Direction = "left") {
     this.facing = facing;
@@ -40,8 +56,44 @@ export class Player {
       false,
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
-    this.sprite.anims.play(`idle-${this.facing}`);
+    this.sprite.anims.play(this.animKey("idle"));
     this.bubble = new ChatBubble(scene);
+  }
+
+  private animKey(prefix: "idle" | "walk"): string {
+    return this.animPrefix
+      ? `${this.animPrefix}:${prefix}-${this.facing}`
+      : `${prefix}-${this.facing}`;
+  }
+
+  /**
+   * Wear a different sprite sheet.
+   *
+   * The texture must already be loaded. Animations are created on first use
+   * for that sheet and then reused, so switching back and forth costs nothing.
+   */
+  wearSprite(scene: Phaser.Scene, spriteKey: string) {
+    if (!scene.textures.exists(spriteKey)) return;
+
+    for (const anim of [
+      ...makeAnims(spriteKey, "idle", 1, 8),
+      ...makeAnims(spriteKey, "walk", 2, 10),
+    ]) {
+      if (scene.anims.exists(anim.key)) continue;
+      scene.anims.create({
+        key: anim.key,
+        frames: scene.anims.generateFrameNumbers(spriteKey, {
+          start: anim.start,
+          end: anim.end,
+        }),
+        frameRate: anim.frameRate,
+        repeat: anim.repeat,
+      });
+    }
+
+    this.animPrefix = spriteKey;
+    this.sprite.setTexture(spriteKey, 0);
+    this.sprite.anims.play(this.animKey("idle"));
   }
 
   /** Show what this player just said, above their own head. */
@@ -165,12 +217,12 @@ export class Player {
       else if (vy < 0) this.facing = "up";
       else if (vy > 0) this.facing = "down";
 
-      const walkKey = `walk-${this.facing}`;
+      const walkKey = this.animKey("walk");
       if (this.sprite.anims.currentAnim?.key !== walkKey) {
         this.sprite.anims.play(walkKey);
       }
     } else {
-      const idleKey = `idle-${this.facing}`;
+      const idleKey = this.animKey("idle");
       if (this.sprite.anims.currentAnim?.key !== idleKey) {
         this.sprite.anims.play(idleKey);
       }

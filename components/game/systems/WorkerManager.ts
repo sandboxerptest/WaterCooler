@@ -4,6 +4,10 @@ import type { Direction } from "../config/animations";
 import type { Pathfinder } from "../utils/Pathfinder";
 import type { SeatDef } from "../utils/MapHelpers";
 import type { SeatState } from "@/types/game";
+import { ensureSheet } from "../utils/sheets";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Workers");
 
 export class WorkerManager {
   private scene: Phaser.Scene;
@@ -13,6 +17,10 @@ export class WorkerManager {
   workers: Worker[] = [];
   runWorkerMap = new Map<string, Worker>();
   seatDefs: SeatDef[] = [];
+  /** Sheets being fetched, so a seat is not requested twice while it loads. */
+  private pending = new Set<string>();
+  /** The last sync, replayed once a sheet arrives. */
+  private lastSync: { seats: SeatState[]; clearNearest: (worker: Worker) => void } | null = null;
 
   constructor(scene: Phaser.Scene, seatDefs: SeatDef[], pois: POI[], pathfinder: Pathfinder) {
     this.scene = scene;
@@ -23,6 +31,24 @@ export class WorkerManager {
 
   spawnWorker(seatDef: SeatDef, seat: SeatState): Worker | null {
     if (!seat.spriteKey) return null;
+    // A look chosen from the roster may not be a texture yet. Fetch it, and
+    // come back to this seat when it is — the worker appears a moment late
+    // rather than as a blank.
+    if (!this.scene.textures.exists(seat.spriteKey)) {
+      if (seat.spritePath && !this.pending.has(seat.spriteKey)) {
+        this.pending.add(seat.spriteKey);
+        const key = seat.spriteKey;
+        log.info(`fetching sheet ${key} for seat ${seat.seatId}`);
+        ensureSheet(this.scene, key, seat.spritePath, (ok) => {
+          this.pending.delete(key);
+          if (!ok) log.error(`sheet ${key} failed to load for seat ${seat.seatId}`);
+          else log.info(`sheet ${key} ready; placing seat ${seat.seatId}`);
+          if (ok && this.lastSync)
+            this.syncWorkers(this.lastSync.seats, this.lastSync.clearNearest);
+        });
+      }
+      return null;
+    }
     const initialFacing: Direction = seatDef.facing;
     const worker = new Worker(
       this.scene,
@@ -40,6 +66,7 @@ export class WorkerManager {
   }
 
   syncWorkers(seats: SeatState[], clearNearest: (worker: Worker) => void) {
+    this.lastSync = { seats, clearNearest };
     const nextBySeatId = new Map(
       seats.filter((seat) => seat.assigned && seat.spriteKey).map((seat) => [seat.seatId, seat]),
     );
