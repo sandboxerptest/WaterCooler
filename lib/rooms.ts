@@ -33,10 +33,31 @@ export function generateRoomSlug(randomBytes: () => string): string {
   return `r-${randomBytes()}`;
 }
 
-/** Which room this browser is in, taken from /r/<slug> or ?room=<slug>. */
+/**
+ * What a room path names: the building, and the floor within it.
+ *
+ * /r/<slug> is the building's lobby; /r/<slug>/floor/<n> is a floor above
+ * it. Each is its own room — its own people, seats and conversation — but
+ * they share the building's identity.
+ */
+export function parseRoomPath(pathname: string): { slug: string; floor: number | null } | null {
+  const match = pathname.match(/^\/r\/([^/]+)(?:\/floor\/(\d{1,2}))?/);
+  if (!match) return null;
+  return {
+    slug: normaliseRoomSlug(decodeURIComponent(match[1])),
+    floor: match[2] ? Number(match[2]) : null,
+  };
+}
+
+/** The room a floor of a building keeps its people in. */
+export function floorRoomSlug(slug: string, level: number): string {
+  return normaliseRoomSlug(`${slug}-floor-${level}`);
+}
+
+/** Which room this browser is in, taken from /r/<slug>[/floor/<n>] or ?room=<slug>. */
 export function roomFromLocation(location: { pathname: string; search: string }): string {
-  const path = location.pathname.match(/^\/r\/([^/]+)/);
-  if (path) return normaliseRoomSlug(decodeURIComponent(path[1]));
+  const path = parseRoomPath(location.pathname);
+  if (path) return path.floor !== null ? floorRoomSlug(path.slug, path.floor) : path.slug;
 
   const params = new URLSearchParams(location.search);
   const query = params.get("room");

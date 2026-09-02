@@ -256,4 +256,25 @@ describe("per-entity writes", () => {
     expect(() => store.upsertSeat(ROOM, { label: "nameless" })).not.toThrow();
     expect(store.getSnapshot(ROOM).tasks).toEqual([]);
   });
+
+  describe("people", () => {
+    it("remembers who calls a building home, in the order they arrived", () => {
+      const store = new RoomStore(":memory:");
+      store.upsertPerson({ id: "ab12cd34", name: "Robert", home: "castle-atlantic" });
+      store.upsertPerson({ id: "ef56gh78", name: "Alice", home: "castle-atlantic" });
+      store.upsertPerson({ id: "ij90kl12", name: "Sam", home: "sandbox-erp" });
+      expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Robert", "Alice"]);
+      expect(store.listPeople("sandbox-erp").map((p) => p.name)).toEqual(["Sam"]);
+    });
+
+    it("moves a person who changes their name or home, keeping their place", () => {
+      const store = new RoomStore(":memory:");
+      store.upsertPerson({ id: "ab12cd34", name: "Robert", home: "castle-atlantic" });
+      store.upsertPerson({ id: "ef56gh78", name: "Alice", home: "castle-atlantic" });
+      store.upsertPerson({ id: "ab12cd34", name: "Bob", home: "castle-atlantic" });
+      expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Bob", "Alice"]);
+      store.upsertPerson({ id: "ab12cd34", name: "Bob", home: "sandbox-erp" });
+      expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Alice"]);
+    });
+  });
 });

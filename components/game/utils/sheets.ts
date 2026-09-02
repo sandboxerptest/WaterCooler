@@ -1,3 +1,4 @@
+import { makeAnims } from "../config/animations";
 import * as Phaser from "phaser";
 import { buildSpriteFrames } from "./MapHelpers";
 
@@ -27,4 +28,23 @@ export function ensureSheet(
     onReady(ok);
   });
   scene.load.start();
+}
+
+/**
+ * The idle and walk animations for a sheet, created once and then reused.
+ * The texture must already be loaded.
+ */
+export function ensureAnims(scene: Phaser.Scene, spriteKey: string) {
+  for (const anim of [
+    ...makeAnims(spriteKey, "idle", 1, 8),
+    ...makeAnims(spriteKey, "walk", 2, 10),
+  ]) {
+    if (scene.anims.exists(anim.key)) continue;
+    scene.anims.create({
+      key: anim.key,
+      frames: scene.anims.generateFrameNumbers(spriteKey, { start: anim.start, end: anim.end }),
+      frameRate: anim.frameRate,
+      repeat: anim.repeat,
+    });
+  }
 }

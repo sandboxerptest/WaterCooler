@@ -1,0 +1,175 @@
+/* --- Welcome (who you are) and the lift (where you are going) --- */
+
+.welcome {
+  width: min(760px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  background: var(--pixel-panel);
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-lg);
+  box-shadow: 4px 4px 24px rgba(0, 0, 0, 0.5);
+  color: var(--pixel-text);
+}
+
+.welcome__title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pixel-accent);
+}
+
+.welcome__lead {
+  margin: 4px 0 0;
+  font-size: 9px;
+  color: var(--pixel-muted);
+}
+
+.welcome__step {
+  display: grid;
+  gap: 8px;
+}
+
+.welcome__label {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pixel-muted);
+}
+
+.welcome__homes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.welcome-home {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  color: var(--pixel-text);
+  cursor: pointer;
+}
+
+.welcome-home:hover {
+  border-color: var(--pixel-accent);
+}
+
+.welcome-home--chosen {
+  border-color: var(--pixel-accent);
+  background: rgba(242, 178, 43, 0.12);
+}
+
+.welcome-home__name {
+  font-size: 10px;
+}
+
+.welcome-home__tagline {
+  font-size: 8px;
+  color: var(--pixel-muted);
+}
+
+.welcome__characters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.welcome-character {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  color: var(--pixel-text);
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.welcome-character:hover {
+  border-color: var(--pixel-accent);
+}
+
+.welcome-character--chosen {
+  border-color: var(--pixel-accent);
+  background: rgba(242, 178, 43, 0.12);
+}
+
+.welcome__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.welcome__hint {
+  font-size: 8px;
+  color: var(--pixel-muted);
+  margin-right: auto;
+}
+
+.lift {
+  width: min(360px, 92vw);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--pixel-panel);
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-lg);
+  box-shadow: 4px 4px 24px rgba(0, 0, 0, 0.5);
+  color: var(--pixel-text);
+}
+
+.lift__stops {
+  display: grid;
+  gap: 8px;
+}
+
+.lift-stop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  color: var(--pixel-text);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lift-stop:hover:not(:disabled) {
+  border-color: var(--pixel-accent);
+}
+
+.lift-stop:disabled {
+  cursor: default;
+  border-color: var(--pixel-accent);
+  opacity: 0.85;
+}
+
+.lift-stop__here {
+  font-size: 8px;
+  color: var(--pixel-accent);
+}
+
+.lift-stop__floor {
+  display: grid;
+  gap: 4px;
+}
+
+.lift-stop__names {
+  font-size: 8px;
+  color: var(--pixel-muted);
+}

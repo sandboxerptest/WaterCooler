@@ -1,8 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { tenantFor } from "@/lib/world/tenants";
-import { roomFromLocation } from "@/lib/rooms";
+import { addressFromLocation, describeFloor } from "@/lib/world/floors";
 
 import Image from "next/image";
 import type { SeatState } from "@/types/game";
@@ -27,7 +26,11 @@ function seatDotColor(seat: SeatState): string {
 
 /** The room never changes without a page load, so there is nothing to subscribe to. */
 const noSubscribe = () => () => {};
-const readTenant = () => tenantFor(roomFromLocation(window.location));
+/** "Castle Atlantic · Lobby": the building and the floor, as a stable string. */
+const readPlace = () => {
+  const address = addressFromLocation(window.location);
+  return address ? `${address.tenant.name} · ${describeFloor(address)}` : null;
+};
 
 export default function TopBar({
   seats,
@@ -37,7 +40,7 @@ export default function TopBar({
   iconOverrides,
   onSeatClick,
 }: TopBarProps) {
-  const tenant = useSyncExternalStore(noSubscribe, readTenant, () => null);
+  const place = useSyncExternalStore(noSubscribe, readPlace, () => null);
   const assignedSeats = seats.filter((s) => s.assigned);
 
   return (
@@ -45,7 +48,7 @@ export default function TopBar({
       {/* Left: logo */}
       <div className="layout-topbar__title">
         <span className="layout-topbar__logo">WATERCOOLER</span>
-        {tenant && <span className="hud-tenant">{tenant.name}</span>}
+        {place && <span className="hud-tenant">{place}</span>}
       </div>
 
       {/* Center: agent pills (each pill is its own floating element) */}

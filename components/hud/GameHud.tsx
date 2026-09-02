@@ -17,7 +17,10 @@ import CharacterStudio from "./CharacterStudio";
 import { Shirt } from "lucide-react";
 import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
-import NamePrompt from "./NamePrompt";
+import Welcome from "./Welcome";
+import { profileSnapshot } from "@/lib/profile";
+import { registerProfile } from "@/lib/people-client";
+import ElevatorModal from "./ElevatorModal";
 import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
 import Pinball from "./Pinball";
@@ -38,6 +41,11 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
   const [showOnboarding, setShowOnboarding] = useState(
     () => !loadOnboardingDone() && !loadGatewayConfig(),
   );
+
+  // Keep the building's register current: name or home may have changed.
+  useEffect(() => {
+    void registerProfile(profileSnapshot());
+  }, []);
 
   // Auto-dismiss onboarding when connection panel opens
   useEffect(() => {
@@ -133,7 +141,8 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
 
   return (
     <div className="hud-overlay">
-      <NamePrompt />
+      <Welcome />
+      <ElevatorModal />
       <AchievementToast />
       <Whiteboard />
       <Pinball />

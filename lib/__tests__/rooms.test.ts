@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_ROOM_SLUG, normaliseRoomSlug, roomFromLocation, generateRoomSlug } from "../rooms";
+import {
+  DEFAULT_ROOM_SLUG,
+  normaliseRoomSlug,
+  floorRoomSlug,
+  parseRoomPath,
+  roomFromLocation,
+  generateRoomSlug,
+} from "../rooms";
 
 describe("normaliseRoomSlug", () => {
   it("keeps a already-clean slug", () => {
@@ -34,6 +41,19 @@ describe("normaliseRoomSlug", () => {
 describe("roomFromLocation", () => {
   it("reads /r/<slug>", () => {
     expect(roomFromLocation({ pathname: "/r/standup", search: "" })).toBe("standup");
+  });
+
+  it("gives a floor its own room, under the building's name", () => {
+    expect(roomFromLocation({ pathname: "/r/castle-atlantic/floor/2", search: "" })).toBe(
+      floorRoomSlug("castle-atlantic", 2),
+    );
+    expect(floorRoomSlug("castle-atlantic", 2)).toBe("castle-atlantic-floor-2");
+    expect(parseRoomPath("/r/castle-atlantic/floor/1")).toEqual({
+      slug: "castle-atlantic",
+      floor: 1,
+    });
+    expect(parseRoomPath("/r/castle-atlantic")).toEqual({ slug: "castle-atlantic", floor: null });
+    expect(parseRoomPath("/")).toBeNull();
   });
 
   it("reads ?room=<slug>", () => {

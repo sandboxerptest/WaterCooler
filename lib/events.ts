@@ -72,6 +72,10 @@ export interface GameEventMap {
    * nothing loads it yet, so today this is how we prove the seam works.
    */
   "transition-entered": [name: string, target: string];
+  /** The person stepped into the lift; the HUD offers the floors. */
+  "open-elevator": [];
+  /** The lift's menu closed, chosen or not; the keys are the character's again. */
+  "elevator-closed": [];
   /**
    * The person chose a different look for themselves. The sheet is fetched
    * and the texture swapped in the scene; nothing about the world changes.

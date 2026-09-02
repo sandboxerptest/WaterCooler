@@ -1,12 +1,6 @@
 import * as Phaser from "phaser";
-import {
-  SPRITE_KEY,
-  MOVE_SPEED,
-  ALL_ANIMS,
-  FRAME_WIDTH,
-  FRAME_HEIGHT,
-  makeAnims,
-} from "../config/animations";
+import { SPRITE_KEY, MOVE_SPEED, ALL_ANIMS, FRAME_WIDTH, FRAME_HEIGHT } from "../config/animations";
+import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
 
 type Direction = "down" | "up" | "left" | "right";
@@ -75,21 +69,7 @@ export class Player {
   wearSprite(scene: Phaser.Scene, spriteKey: string) {
     if (!scene.textures.exists(spriteKey)) return;
 
-    for (const anim of [
-      ...makeAnims(spriteKey, "idle", 1, 8),
-      ...makeAnims(spriteKey, "walk", 2, 10),
-    ]) {
-      if (scene.anims.exists(anim.key)) continue;
-      scene.anims.create({
-        key: anim.key,
-        frames: scene.anims.generateFrameNumbers(spriteKey, {
-          start: anim.start,
-          end: anim.end,
-        }),
-        frameRate: anim.frameRate,
-        repeat: anim.repeat,
-      });
-    }
+    ensureAnims(scene, spriteKey);
 
     this.animPrefix = spriteKey;
     this.sprite.setTexture(spriteKey, 0);
@@ -170,11 +150,9 @@ export class Player {
    * @param padVelocity movement from a connected gamepad; used when the
    * keyboard is idle, so either input can drive the player at any time.
    */
-  update(padVelocity?: { vx: number; vy: number }) {
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+  /** What the keys, or failing them the pad, are asking for. */
+  inputVelocity(padVelocity?: { vx: number; vy: number }): { vx: number; vy: number } {
     const speed = MOVE_SPEED;
-
-    // Determine velocity from input
     let vx = 0;
     let vy = 0;
 
@@ -195,7 +173,21 @@ export class Player {
       vx = padVelocity.vx;
       vy = padVelocity.vy;
     }
+    return { vx, vy };
+  }
 
+  update(padVelocity?: { vx: number; vy: number }) {
+    const { vx, vy } = this.inputVelocity(padVelocity);
+    this.move(vx, vy);
+  }
+
+  /** Walk at exactly this velocity, whatever the keys say — for scripted steps. */
+  drive(velocity: { vx: number; vy: number }) {
+    this.move(velocity.vx, velocity.vy);
+  }
+
+  private move(vx: number, vy: number) {
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(vx, vy);
 
     const moving = vx !== 0 || vy !== 0;

@@ -164,6 +164,14 @@ CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
 CREATE INDEX IF NOT EXISTS tasks_by_room ON tasks (room, position);
 CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
 CREATE INDEX IF NOT EXISTS sessions_by_room ON sessions (room, position);
+
+CREATE TABLE IF NOT EXISTS people (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  home       TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS people_home ON people (home, updated_at);
 `;
 
 interface DataRow {
@@ -212,6 +220,29 @@ export class RoomStore {
         // Already present, which is the common case
       }
     }
+  }
+
+  // ── People ────────────────────────────────────────────
+
+  /**
+   * Remember who calls a building home. A person is a browser profile, not
+   * an account; this is what puts a desk with their name on it on their
+   * building's floor for everyone else to see.
+   */
+  upsertPerson(person: { id: string; name: string; home: string }) {
+    this.db
+      .prepare(
+        `INSERT INTO people (id, name, home, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, home = excluded.home, updated_at = excluded.updated_at`,
+      )
+      .run(person.id, person.name.slice(0, 16), person.home, new Date().toISOString());
+  }
+
+  /** Everyone who calls a building home, earliest first — desks are handed out in this order. */
+  listPeople(home: string): { id: string; name: string }[] {
+    return this.db
+      .prepare("SELECT id, name FROM people WHERE home = ? ORDER BY rowid ASC")
+      .all(home) as unknown as { id: string; name: string }[];
   }
 
   // ── Whiteboard ────────────────────────────────────────

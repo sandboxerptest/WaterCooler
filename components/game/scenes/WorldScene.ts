@@ -3,12 +3,15 @@ import { Player } from "../entities/Player";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { Pathfinder } from "../utils/Pathfinder";
-import { ensureSheet } from "../utils/sheets";
+import { ensureAnims, ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
-import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
+import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
 import { PF_PADDING } from "@/lib/constants";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
+import { ArrivalWalk } from "@/lib/arrival";
+import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { rememberedCharacter } from "@/lib/characters/choice";
+import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
 import {
   BUILDINGS,
@@ -16,7 +19,6 @@ import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
   spawnFor,
-  tenantUrl,
   type Building,
   type Rect,
 } from "@/lib/world/tenants";
@@ -62,6 +64,10 @@ export class WorldScene extends Phaser.Scene {
   private zones: DoorZone[] = [];
   private pathfinder: Pathfinder | null = null;
   private leaving = false;
+  /** The steps taken on coming out of a door, before the keys are the player's. */
+  private arrival = new ArrivalWalk();
+  /** Residents currently out on the green, by id. */
+  private residents = new Map<string, Phaser.GameObjects.GameObject[]>();
 
   constructor() {
     super({ key: "WorldScene" });
@@ -99,7 +105,11 @@ export class WorldScene extends Phaser.Scene {
     );
 
     const at = spawnFor(data?.from);
-    this.player = new Player(this, at.x, at.y, "up");
+    this.player = new Player(this, at.x, at.y, "down");
+    // Out of a building's door: a few steps down the path before the keys
+    // are yours, so the key held through the door does not walk you back in.
+    this.arrival.reset();
+    if (BUILDINGS.some((b) => b.tenant.slug === data?.from)) this.arrival.begin("down", 96);
     this.player.sprite.setCollideWorldBounds(true);
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.physics.add.collider(this.player.sprite, walls);
@@ -122,6 +132,55 @@ export class WorldScene extends Phaser.Scene {
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
     log.info(`outside, arriving from ${data?.from ?? "the road"}`);
+
+    // Anyone taking the air. Outside has no room, so ask where everyone is.
+    void this.showResidents();
+    this.time.addEvent({ delay: 10_000, loop: true, callback: () => void this.showResidents() });
+  }
+
+  private async showResidents() {
+    let outside: Whereabouts[] = [];
+    try {
+      const res = await fetch("/api/residents");
+      const body = (await res.json()) as { residents?: Whereabouts[] };
+      outside = (body.residents ?? []).filter((r) => r.place === "outside");
+    } catch {
+      return;
+    }
+    if (!this.scene.isActive()) return;
+
+    for (const [id, parts] of this.residents) {
+      if (outside.some((r) => r.id === id)) continue;
+      for (const part of parts) part.destroy();
+      this.residents.delete(id);
+    }
+    outside.forEach((resident, i) => {
+      if (this.residents.has(resident.id)) return;
+      const path = WORKER_SPRITES.find((w) => w.key === resident.spriteKey)?.path;
+      if (!path) return;
+      this.residents.set(resident.id, []);
+      ensureSheet(this, resident.spriteKey, path, (ok) => {
+        if (!ok || !this.scene.isActive() || !this.residents.has(resident.id)) return;
+        ensureAnims(this, resident.spriteKey);
+        const feetX = OUTSIDE_SPOT.x + i * 40;
+        const sprite = this.add
+          .sprite(feetX, OUTSIDE_SPOT.y - 43, resident.spriteKey, 0)
+          .setDepth(OUTSIDE_SPOT.y);
+        sprite.play(`${resident.spriteKey}:idle-down`);
+        const tag = this.add
+          .text(feetX, OUTSIDE_SPOT.y + 6, resident.name, {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: "8px",
+            color: "#ffe9a8",
+            backgroundColor: "rgba(0,0,0,0.7)",
+            padding: { x: 4, y: 2 },
+          })
+          .setOrigin(0.5, 0)
+          .setDepth(OUTSIDE_SPOT.y + 1)
+          .setResolution(2);
+        this.residents.set(resident.id, [sprite, tag]);
+      });
+    });
   }
 
   /** Name the rectangles of the props sheet and the tileset so they can be drawn by name. */
@@ -215,7 +274,12 @@ export class WorldScene extends Phaser.Scene {
       .setDepth(foot + 1)
       .setResolution(2);
 
-    return { name: b.tenant.slug, target: tenantUrl(b.tenant), ...b.door, facing: "up" };
+    return {
+      name: b.tenant.slug,
+      target: floorUrl(b.tenant, LOBBY, "door"),
+      ...b.door,
+      facing: "up",
+    };
   }
 
   private initTapToWalk() {
@@ -240,8 +304,25 @@ export class WorldScene extends Phaser.Scene {
     return { x: body.center.x, y: body.center.y };
   }
 
-  update() {
+  update(_time: number, delta: number) {
     if (this.leaving) return;
+    if (this.arrival.holdsInput) {
+      if (this.arrival.walking) {
+        this.player.drive(this.arrival.step(delta, MOVE_SPEED));
+      } else {
+        const wanted = this.player.inputVelocity(this.gamepad.velocity(MOVE_SPEED));
+        this.arrival.release(wanted.vx !== 0 || wanted.vy !== 0);
+        this.player.drive(this.arrival.allow(wanted));
+        for (const zone of this.latch.step(this.zones, this.feet())) {
+          this.leaving = true;
+          this.player.update({ vx: 0, vy: 0 });
+          log.info(`entering ${zone.name}`);
+          window.location.assign(zone.target);
+        }
+      }
+      this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
+      return;
+    }
     const padVelocity = this.gamepad.velocity(MOVE_SPEED);
     const steering = this.navigator.active ? this.navigator.step(this.feet(), MOVE_SPEED) : null;
     if (
