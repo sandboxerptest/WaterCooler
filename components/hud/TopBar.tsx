@@ -1,5 +1,9 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import { tenantFor } from "@/lib/world/tenants";
+import { roomFromLocation } from "@/lib/rooms";
+
 import Image from "next/image";
 import type { SeatState } from "@/types/game";
 import type { HudPanelId, HudDockItem } from "./HudDock";
@@ -21,6 +25,10 @@ function seatDotColor(seat: SeatState): string {
   return "green";
 }
 
+/** The room never changes without a page load, so there is nothing to subscribe to. */
+const noSubscribe = () => () => {};
+const readTenant = () => tenantFor(roomFromLocation(window.location));
+
 export default function TopBar({
   seats,
   toolItems,
@@ -29,6 +37,7 @@ export default function TopBar({
   iconOverrides,
   onSeatClick,
 }: TopBarProps) {
+  const tenant = useSyncExternalStore(noSubscribe, readTenant, () => null);
   const assignedSeats = seats.filter((s) => s.assigned);
 
   return (
@@ -36,6 +45,7 @@ export default function TopBar({
       {/* Left: logo */}
       <div className="layout-topbar__title">
         <span className="layout-topbar__logo">WATERCOOLER</span>
+        {tenant && <span className="hud-tenant">{tenant.name}</span>}
       </div>
 
       {/* Center: agent pills (each pill is its own floating element) */}

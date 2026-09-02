@@ -1596,3 +1596,17 @@
   color: var(--pixel-muted);
   white-space: nowrap;
 }
+
+/* Which business this office belongs to, beside the title */
+.hud-tenant {
+  margin-left: 10px;
+  padding: 2px 7px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pixel-accent);
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  background: var(--pixel-panel);
+  vertical-align: middle;
+}

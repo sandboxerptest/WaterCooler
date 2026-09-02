@@ -6,6 +6,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
+import { loadEnvConfig } from "@next/env";
 import next from "next";
 import { createLogger } from "./lib/logger";
 import { attachWsProxy } from "./lib/ws-proxy";
@@ -28,6 +29,12 @@ const log = createLogger("Server");
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "ws://127.0.0.1:18789/";
+// Next loads .env files during app.prepare(), long after the settings below
+// are read. Without this, AGENT_PROVIDER in .env.local was silently ignored
+// while every lazily-read key in the same file worked — so the app would boot
+// on the wrong provider and say so in the HUD with no hint why.
+loadEnvConfig(process.cwd(), dev);
+
 const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "claude";
 const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER) ? getCliProvider(AGENT_PROVIDER) : null;
 // Expose provider to Next.js client code (compiled on-demand in dev)

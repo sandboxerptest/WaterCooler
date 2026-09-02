@@ -1,0 +1,51 @@
+{
+  "tree": {
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 120
+  },
+  "bush": {
+    "x": 104,
+    "y": 0,
+    "width": 64,
+    "height": 48
+  },
+  "lamp": {
+    "x": 176,
+    "y": 0,
+    "width": 32,
+    "height": 96
+  },
+  "bench": {
+    "x": 216,
+    "y": 0,
+    "width": 96,
+    "height": 48
+  },
+  "fountain": {
+    "x": 320,
+    "y": 0,
+    "width": 144,
+    "height": 96,
+    "animateWith": "fountain2"
+  },
+  "fountain2": {
+    "x": 472,
+    "y": 0,
+    "width": 144,
+    "height": 96
+  },
+  "planter": {
+    "x": 624,
+    "y": 0,
+    "width": 64,
+    "height": 48
+  },
+  "signpost": {
+    "x": 696,
+    "y": 0,
+    "width": 48,
+    "height": 96
+  }
+}
