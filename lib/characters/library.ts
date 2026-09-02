@@ -12,6 +12,7 @@ import {
   BOSS_SPRITE_PATH,
   WORKER_SPRITES,
 } from "@/components/game/config/animations";
+import { RESIDENTS } from "@/lib/world/residents";
 
 export interface RosterCharacter {
   /** Stable id used in URLs. Library ids are `library-<key>`. */
@@ -30,8 +31,11 @@ export interface RosterCharacter {
 
 export const LIBRARY_PREFIX = "library-";
 
+/** A resident's look is theirs: it stays in the library for them, but nobody else can pick it. */
+const RESERVED = new Set(RESIDENTS.map((r) => r.spriteKey));
+
 export const LIBRARY_CHARACTERS: RosterCharacter[] = [
-  ...WORKER_SPRITES.map((s) => ({
+  ...WORKER_SPRITES.filter((s) => !RESERVED.has(s.key)).map((s) => ({
     id: `${LIBRARY_PREFIX}${s.key}`,
     key: s.key,
     name: s.label,

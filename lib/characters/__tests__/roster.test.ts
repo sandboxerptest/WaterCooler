@@ -3,11 +3,20 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { LIBRARY_CHARACTERS, LIBRARY_PREFIX, librarySheetPath, textureKeyFor } from "../library";
+import { RESIDENTS } from "../../world/residents";
 
 describe("the library roster", () => {
   it("lists every shipped worker and the boss", () => {
     expect(LIBRARY_CHARACTERS.length).toBeGreaterThanOrEqual(5);
     expect(LIBRARY_CHARACTERS.some((c) => c.key === "character_09")).toBe(true);
+    // The residents keep their looks to themselves.
+    for (const resident of RESIDENTS) {
+      expect(
+        LIBRARY_CHARACTERS.some((c) => c.key === resident.spriteKey),
+        resident.name,
+      ).toBe(false);
+    }
+    expect(LIBRARY_CHARACTERS.some((c) => c.name === "Coop")).toBe(true);
     for (const c of LIBRARY_CHARACTERS) {
       expect(c.id.startsWith(LIBRARY_PREFIX)).toBe(true);
       expect(c.source).toBe("library");
