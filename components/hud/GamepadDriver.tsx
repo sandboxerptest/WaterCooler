@@ -52,7 +52,7 @@ export default function GamepadDriver() {
       if (button === talkButton()) {
         if (phase === "down") {
           talking = true;
-          void voiceChat.enable();
+          void voiceChat.enable({ remember: false });
         } else if (talking) {
           talking = false;
           void voiceChat.disable();

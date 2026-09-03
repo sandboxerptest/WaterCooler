@@ -2,13 +2,14 @@ import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
+import { CameraController } from "../systems/CameraController";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { Pathfinder } from "../utils/Pathfinder";
 import { ensureAnims, ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
 import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
-import { PF_PADDING, ZOOM_MAX, ZOOM_MIN } from "@/lib/constants";
+import { PF_PADDING } from "@/lib/constants";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
 import { ArrivalWalk } from "@/lib/arrival";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
@@ -16,7 +17,6 @@ import { rememberedCharacter } from "@/lib/characters/choice";
 import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
 import { gameEvents } from "@/lib/events";
-import { frameZoom } from "@/lib/camera";
 import { WORLD_PATH, showAddress } from "@/lib/world/paths";
 import {
   BUILDINGS,
@@ -85,6 +85,7 @@ export class WorldScene extends Phaser.Scene {
   private residents = new Map<string, Phaser.GameObjects.GameObject[]>();
   /** The other people out here. */
   private presence: ScenePresence | null = null;
+  private cameraController!: CameraController;
 
   constructor() {
     super({ key: "WorldScene" });
@@ -146,21 +147,19 @@ export class WorldScene extends Phaser.Scene {
       });
     }
 
-    const cam = this.cameras.main;
-    cam.setBackgroundColor("#1a1814");
-    cam.setRoundPixels(true);
-    cam.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    // The rooms' zoom, so people and signs are the size they are indoors;
-    // never so far out that the camera would look past the world's edge.
-    const zoom = () =>
-      Math.max(
-        frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX),
-        cam.width / WORLD_WIDTH,
-        cam.height / WORLD_HEIGHT,
-      );
-    cam.setZoom(zoom());
-    this.scale.on("resize", () => cam.setZoom(zoom()));
-    cam.startFollow(this.player.sprite, true, 0.12, 0.12);
+    // The rooms' camera: their zoom to start, the wheel to zoom in and
+    // out, a drag to look around — but never so far out that it looks past
+    // the world's edge.
+    this.cameraController = new CameraController(
+      this,
+      this.player.sprite,
+      WORLD_WIDTH,
+      WORLD_HEIGHT,
+      {
+        coverMap: true,
+      },
+    );
+    this.cameraController.init();
 
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
@@ -325,6 +324,10 @@ export class WorldScene extends Phaser.Scene {
     // Sort against the props by where the feet are.
     this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
     this.reportPosition();
+    // Walking after a look around brings the camera back to you.
+    if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
+      this.cameraController.resumeCameraFollow();
+    }
 
     for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
   }

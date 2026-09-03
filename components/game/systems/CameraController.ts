@@ -7,7 +7,7 @@ import {
   ZOOM_MAX,
   CAMERA_DRAG_THRESHOLD,
 } from "@/lib/constants";
-import { frameZoom } from "@/lib/camera";
+import { coverZoom, frameZoom } from "@/lib/camera";
 
 export class CameraController {
   private scene: Phaser.Scene;
@@ -18,16 +18,21 @@ export class CameraController {
   mapWidth = 0;
   mapHeight = 0;
 
+  /** A map rather than a room: zoom out until it fills the view, not just to the lobby's fit. */
+  private coverMap: boolean;
+
   constructor(
     scene: Phaser.Scene,
     playerSprite: Phaser.Physics.Arcade.Sprite,
     mapWidth: number,
     mapHeight: number,
+    options: { coverMap?: boolean } = {},
   ) {
     this.scene = scene;
     this.playerSprite = playerSprite;
     this.mapWidth = mapWidth;
     this.mapHeight = mapHeight;
+    this.coverMap = options.coverMap ?? false;
   }
 
   init() {
@@ -56,12 +61,23 @@ export class CameraController {
    * background.
    */
   private coverZoom(cam: Phaser.Cameras.Scene2D.Camera): number {
+    if (this.coverMap) {
+      return coverZoom(cam.width, cam.height, this.mapWidth, this.mapHeight, ZOOM_MIN, ZOOM_MAX);
+    }
     return frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX);
   }
 
-  /** Fit the lobby to the viewport. Called at start and whenever the viewport changes. */
+  /**
+   * Fit the lobby to the viewport. Called at start and whenever the
+   * viewport changes. Every place starts at this scale, so people and
+   * signs are the same size out of doors as in; on a map the wheel can then
+   * go further out.
+   */
   private applyFillZoom(cam: Phaser.Cameras.Scene2D.Camera) {
-    const next = this.coverZoom(cam);
+    const next = Math.max(
+      frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX),
+      this.coverZoom(cam),
+    );
     if (next !== cam.zoom) cam.setZoom(next);
   }
 

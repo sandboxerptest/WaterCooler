@@ -130,6 +130,8 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   const rooms = new Map<string, Room>();
   /** Which room each connection is in, so later messages can be routed. */
   const roomOf = new Map<string, string>();
+  /** Whose microphone is on, by connection: it stays on through a door. */
+  const micOf = new Map<string, boolean>();
 
   (globalThis as Record<symbol, unknown>)[BROADCAST_KEY] = ((slug, message) =>
     broadcast(slug, message)) satisfies RoomBroadcast;
@@ -448,6 +450,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
           room.sockets.set(id, ws);
           roomOf.set(id, slug);
+          if (micOf.get(id)) room.hub.setMic(id, true);
           log.info(
             `${result.player.name} joined "${slug}" (${room.hub.count}/${room.hub.capacity})`,
           );
@@ -550,6 +553,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (parsed.type === "mic") {
           // Who is on voice is part of presence, so the room can count it
           // and a late arrival sees it without a handshake.
+          micOf.set(id, parsed.on === true);
           room.hub.setMic(id, parsed.on === true);
           broadcastOnline();
           return;
@@ -560,8 +564,14 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           // to someone in this room, and passed on unread.
           const to = typeof parsed.to === "string" ? parsed.to : "";
           if (!to || to === id || !isVoiceSignal(parsed.signal)) return;
-          if (parsed.signal.kind === "hello") room.hub.setMic(id, true);
-          if (parsed.signal.kind === "bye") room.hub.setMic(id, false);
+          if (parsed.signal.kind === "hello") {
+            micOf.set(id, true);
+            room.hub.setMic(id, true);
+          }
+          if (parsed.signal.kind === "bye") {
+            micOf.set(id, false);
+            room.hub.setMic(id, false);
+          }
           if (roomOf.get(to) !== slug) return;
           const target = room.sockets.get(to);
           if (!target || target.readyState !== target.OPEN) return;
@@ -598,9 +608,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (slug) rooms.get(slug)?.hub.touch(id);
       });
 
-      ws.on("close", () => drop(id));
+      ws.on("close", () => {
+        micOf.delete(id);
+        drop(id);
+      });
       ws.on("error", (err) => {
         log.warn("socket error:", err.message);
+        micOf.delete(id);
         drop(id);
       });
     });

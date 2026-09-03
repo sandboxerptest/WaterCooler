@@ -25,3 +25,21 @@ export function fitZoom(viewW: number, viewH: number, mapW: number, mapH: number
 export function frameZoom(viewW: number, viewH: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, fitZoom(viewW, viewH, ROOM_FRAME.width, ROOM_FRAME.height)));
 }
+
+/**
+ * How far out a map can be zoomed: until it just fills the viewport, so the
+ * camera never looks past its edge, and never below the game's least zoom.
+ * A room stops at the lobby's fit; a map is bigger than a screen, and
+ * seeing more of it is the point of zooming out.
+ */
+export function coverZoom(
+  viewW: number,
+  viewH: number,
+  mapW: number,
+  mapH: number,
+  min: number,
+  max: number,
+): number {
+  const fill = mapW > 0 && mapH > 0 ? Math.max(viewW / mapW, viewH / mapH) : 0;
+  return Math.min(max, Math.max(min, fill));
+}

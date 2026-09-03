@@ -2,14 +2,14 @@ import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
+import { CameraController } from "../systems/CameraController";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { Pathfinder } from "../utils/Pathfinder";
 import { ensureAnims, ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
 import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
-import { PF_PADDING, ZOOM_MAX, ZOOM_MIN } from "@/lib/constants";
-import { frameZoom } from "@/lib/camera";
+import { PF_PADDING } from "@/lib/constants";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
 import { ArrivalWalk } from "@/lib/arrival";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
@@ -78,6 +78,7 @@ export class CampusScene extends Phaser.Scene {
   private arrival = new ArrivalWalk();
   /** The other people on the yard. */
   private presence: ScenePresence | null = null;
+  private cameraController!: CameraController;
 
   constructor() {
     super({ key: "CampusScene" });
@@ -168,18 +169,10 @@ export class CampusScene extends Phaser.Scene {
       });
     }
 
-    // The whole yard on one screen, at the same scale as every room: the
-    // lobby's zoom, not a fit of its own, so nothing here looks larger or
-    // smaller than it does through a door.
-    const cam = this.cameras.main;
-    cam.setBackgroundColor("#1a1814");
-    cam.setRoundPixels(true);
-    cam.setZoom(frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX));
-    cam.centerOn(width / 2, height / 2);
-    this.scale.on("resize", () => {
-      cam.setZoom(frameZoom(cam.width, cam.height, ZOOM_MIN, ZOOM_MAX));
-      cam.centerOn(width / 2, height / 2);
-    });
+    // The rooms' camera: the whole yard on one screen at the lobby's zoom
+    // to start, centred, and the wheel to zoom in and look closer.
+    this.cameraController = new CameraController(this, this.player.sprite, width, height);
+    this.cameraController.init();
 
     // Whose yard this is, across the top.
     this.add
@@ -365,6 +358,9 @@ export class CampusScene extends Phaser.Scene {
     this.player.update(steering ?? padVelocity);
     this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
     this.reportPosition();
+    if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
+      this.cameraController.resumeCameraFollow();
+    }
     for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
   }
 

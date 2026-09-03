@@ -22,6 +22,7 @@ import { getPlayers } from "../presence-roster";
 import { getSelfId } from "../presence-self";
 import type { PresencePlayer, VoiceSignal } from "../presence-types";
 import { distanceBetween, offers, volumeAt } from "./proximity";
+import { rememberVoice, voiceWasOn } from "./remember";
 
 const log = createLogger("Voice");
 
@@ -131,20 +132,31 @@ class VoiceChat {
         onRoomMessage((message) => {
           if (message.type === "voice") void this.handle(message.from.id, message.signal);
           else if (message.type === "left") this.drop(message.id);
-          else if (message.type === "presence" || message.type === "welcome") this.roster();
+          else if (message.type === "welcome") {
+            // A new room, or a reconnection: it does not know the microphone
+            // is on until told, and nobody in it has been greeted yet.
+            if (this.view.status === "on") {
+              sendRoom({ type: "mic", on: true });
+              this.greeted.clear();
+            }
+            this.roster();
+          } else if (message.type === "presence") this.roster();
         }),
         gameEvents.on("player-moved", (position) => {
           this.me = { x: position.x, y: position.y };
           this.updateVolumes();
         }),
       ];
+      // The microphone was on when the last page was left: on again here.
+      if (voiceWasOn() && this.view.status === "off") void this.enable();
     }
     return () => {
       this.attached = Math.max(0, this.attached - 1);
       if (this.attached === 0) {
         for (const unsub of this.unsubs) unsub();
         this.unsubs = [];
-        void this.disable();
+        // The page is going, not the person's choice: keep it remembered.
+        void this.disable({ forget: false });
       }
     };
   }
@@ -154,7 +166,12 @@ class VoiceChat {
     else await this.enable();
   }
 
-  async enable() {
+  /**
+   * Switch the microphone on. It is remembered for this tab, so it comes
+   * back after walking through a door — unless it is a hold-to-talk press,
+   * which lasts only as long as the button.
+   */
+  async enable({ remember = true }: { remember?: boolean } = {}) {
     if (this.view.status === "on" || this.view.status === "requesting") return;
     if (typeof RTCPeerConnection === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       this.publish({ status: "unsupported", reason: "This browser cannot do voice chat." });
@@ -187,6 +204,7 @@ class VoiceChat {
     this.levelTimer = setInterval(() => this.pollLevels(), LEVEL_POLL_MS);
     this.failedPeers = 0;
     this.publish({ status: "on" });
+    if (remember) rememberVoice(true);
     log.info("microphone on");
     // The room counts who is on voice; then tell everyone here, and
     // those with a microphone on will answer.
@@ -196,7 +214,8 @@ class VoiceChat {
     this.census();
   }
 
-  async disable() {
+  async disable({ forget = true }: { forget?: boolean } = {}) {
+    if (forget) rememberVoice(false);
     if (this.view.status === "off") return;
     for (const player of this.humans()) this.send(player.id, { kind: "bye" });
     for (const id of [...this.peers.keys()]) this.drop(id);
