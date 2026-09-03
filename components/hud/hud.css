@@ -1644,6 +1644,76 @@
 }
 
 /* ── The trophy wall ───────────────────────────────────── */
+/* ── People: everyone online, by place ── */
+.people {
+  padding: 10px 12px;
+  font-size: 9px;
+}
+
+.people__count {
+  font-size: 10px;
+  color: var(--pixel-accent);
+  margin-bottom: 10px;
+}
+
+.people__empty {
+  color: var(--pixel-muted);
+  line-height: 1.6;
+}
+
+.people__place {
+  margin-bottom: 12px;
+}
+
+.people__place-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--pixel-border);
+  color: var(--pixel-text);
+  font-size: 9px;
+}
+
+.people__here {
+  font-size: 7px;
+  color: var(--pixel-green);
+  border: 1px solid var(--pixel-green);
+  border-radius: var(--pixel-radius-sm);
+  padding: 1px 4px;
+}
+
+.people__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: var(--pixel-radius-sm);
+}
+
+.people__row--me {
+  background: rgba(255, 233, 168, 0.08);
+}
+
+.people__who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.people__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.people__me {
+  font-size: 7px;
+  color: var(--pixel-muted);
+}
+
 .badges {
   display: flex;
   flex-direction: column;

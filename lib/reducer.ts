@@ -69,10 +69,37 @@ export function resolveSeatLabelForTask(seats: SeatState[], seatId?: string) {
   return seatIndex >= 0 ? seats[seatIndex]?.label : undefined;
 }
 
-function mergeSessionChat(existing: ChatMessage[], sessionKey: string, incoming: ChatMessage[]) {
-  return [...existing.filter((msg) => msg.sessionKey !== sessionKey), ...incoming].slice(
-    -MAX_CHAT * MAX_SESSIONS,
+/**
+ * Bring a session's conversation in from the gateway without losing what the
+ * gateway never had: the room's talk, and the other people's task messages,
+ * which carry their signatures. The gateway's copy of a task message has no
+ * signature, so where a signed one is already here the copy is dropped
+ * rather than shown twice. Everything is put back in time order.
+ */
+export function mergeSessionChat(
+  existing: ChatMessage[],
+  sessionKey: string,
+  incoming: ChatMessage[],
+) {
+  const isRoomTalk = (msg: ChatMessage) => msg.roomChat === true || msg.role === "player";
+  const signed = (msg: ChatMessage) => msg.role === "user" && msg.authorId !== undefined;
+  const kept = existing.filter(
+    (msg) => msg.sessionKey !== sessionKey || isRoomTalk(msg) || signed(msg),
   );
+  const signedTexts = new Set(
+    kept
+      .filter((msg) => msg.sessionKey === sessionKey && signed(msg))
+      .map((msg) => (msg.role === "tool" ? "" : msg.content)),
+  );
+  const keptIds = new Set(kept.map((msg) => msg.id));
+  const added = incoming.filter((msg) => {
+    if (keptIds.has(msg.id)) return false;
+    if (msg.role === "user" && signedTexts.has(msg.content)) return false;
+    return true;
+  });
+  return [...kept, ...added]
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(-MAX_CHAT * MAX_SESSIONS);
 }
 
 function resetSeatRuntime(seats: SeatState[]) {

@@ -8,6 +8,8 @@ import { gameEvents } from "../events";
 import type { Action } from "../reducer";
 import { chatId, findTask, resolveSeatLabelForTask, MAIN_SESSION_KEY } from "../reducer";
 import { createLogger } from "../logger";
+import { loadPlayerName } from "../persistence";
+import { getSelfId } from "../presence-self";
 
 const log = createLogger("TaskRouter");
 
@@ -151,6 +153,9 @@ export function useTaskRouter(refs: TaskRouterRefs) {
           content: files ? `${message}\n${files.map((f) => `📎 ${f.name}`).join("\n")}` : message,
           timestamp: new Date().toISOString(),
           sessionKey,
+          // Signed, so the others in the room see whose task it was.
+          actorName: loadPlayerName(),
+          authorId: getSelfId() ?? undefined,
         },
       });
       gameEvents.emit("task-assigned", taskId, message, seatId, sessionKey);

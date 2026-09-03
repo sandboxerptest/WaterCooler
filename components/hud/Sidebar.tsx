@@ -11,6 +11,8 @@ import ChatPanel from "./ChatPanel";
 import ActivityPanel from "./ActivityPanel";
 import { TaskList } from "./TaskPanel";
 import AchievementsPanel from "./AchievementsPanel";
+import PeoplePanel from "./PeoplePanel";
+import { useOnline } from "@/lib/presence-online";
 
 /**
  * The column that stays.
@@ -21,7 +23,7 @@ import AchievementsPanel from "./AchievementsPanel";
  * Here it has a home of its own, alongside the office rather than on top of it.
  */
 
-export type SidebarTab = "chat" | "activity" | "tasks" | "badges";
+export type SidebarTab = "chat" | "activity" | "tasks" | "badges" | "people";
 
 interface SidebarProps {
   open: boolean;
@@ -33,6 +35,7 @@ interface SidebarProps {
 export default function Sidebar({ open, width, onWidthChange, onClose }: SidebarProps) {
   const { state } = useStudio();
   const [tab, setTab] = useState<SidebarTab>("chat");
+  const online = useOnline();
   const draggingRef = useRef(false);
 
   const activeSessionKey = state.activeSessionKey ?? MAIN_SESSION_KEY;
@@ -40,7 +43,7 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
   // are talking to may well be looking at a different one
   const messages = state.chatMessages.filter(
     (message) =>
-      (message.roomChat || message.sessionKey === activeSessionKey) &&
+      (message.roomChat || message.role === "player" || message.sessionKey === activeSessionKey) &&
       isVisibleChatMessage(message),
   );
   const tasks = state.tasks.filter((task) => task.sessionKey === activeSessionKey);
@@ -157,6 +160,15 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
           </button>
           <button
             type="button"
+            className={`app-sidebar__tab${tab === "people" ? " is-active" : ""}`}
+            onClick={() => setTab("people")}
+            title="Everyone online, and where they are"
+          >
+            People
+            {online.length > 0 && <span className="app-sidebar__count">{online.length}</span>}
+          </button>
+          <button
+            type="button"
             className="app-sidebar__collapse"
             onClick={onClose}
             title="Hide the panel"
@@ -181,6 +193,8 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
             <div className="app-sidebar__scroll">
               <TaskList tasks={state.tasks} />
             </div>
+          ) : tab === "people" ? (
+            <PeoplePanel />
           ) : (
             <AchievementsPanel />
           )}

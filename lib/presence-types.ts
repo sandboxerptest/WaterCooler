@@ -152,6 +152,24 @@ export interface WelcomeMessage {
   capacity: number;
 }
 
+/** Somebody on the server, and the room they are in. */
+export interface OnlinePerson {
+  id: string;
+  name: string;
+  spriteKey: string;
+  room: string;
+}
+
+/**
+ * Everyone on the server, wherever they are. Sent to every connection
+ * when someone arrives, leaves or walks somewhere else, and now and then
+ * regardless, so nobody's list drifts.
+ */
+export interface OnlineMessage {
+  type: "online";
+  people: OnlinePerson[];
+}
+
 export interface RejectedMessage {
   type: "rejected";
   reason: "full";
@@ -254,7 +272,8 @@ export type ServerMessage =
   | ActivityBroadcast
   | PongBroadcast
   | BoardBroadcast
-  | VoiceBroadcast;
+  | VoiceBroadcast
+  | OnlineMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;

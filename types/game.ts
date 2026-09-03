@@ -89,6 +89,12 @@ export interface ChatMessageBase {
   sessionKey: string;
   actorName?: string;
   /**
+   * Who wrote it, by their presence id, for a message a person typed. Other
+   * people's task messages arrive through the room and would otherwise
+   * read as one's own.
+   */
+  authorId?: string;
+  /**
    * Said out loud to the room rather than to an agent.
    *
    * Conversation is filed under the session it belongs to, but talking to the

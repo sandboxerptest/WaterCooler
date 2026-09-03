@@ -3,6 +3,9 @@
 import { Square } from "lucide-react";
 import type { ChatMessage } from "@/types/game";
 import ToolBubble from "./ToolBubble";
+import { speakerLabel } from "@/lib/chat-speaker";
+import { getSelfId } from "@/lib/presence-self";
+import { loadPlayerName } from "@/lib/persistence";
 
 export default function MessageBubble({
   msg,
@@ -34,11 +37,7 @@ export default function MessageBubble({
     <div className={`hud-chat__bubble hud-chat__bubble--${variant}`}>
       <div className="hud-chat__header">
         <div className="hud-chat__role">
-          {msg.role === "user"
-            ? "You"
-            : msg.role === "player"
-              ? `${msg.actorName ?? "Someone"} · here`
-              : (msg.actorName ?? actorName ?? "Assistant")}
+          {speakerLabel(msg, { id: getSelfId(), name: loadPlayerName() }, actorName)}
         </div>
         {canStop && msg.role === "user" && (
           <button

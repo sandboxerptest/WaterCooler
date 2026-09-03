@@ -29,6 +29,7 @@ import {
   isClientMessage,
   isWorldChange,
   type Facing,
+  type OnlineMessage,
   type SayScope,
   type ServerMessage,
   type WorldChange,
@@ -39,6 +40,9 @@ import {
 import { ResidentSimulation } from "./residents";
 
 const log = createLogger("Presence");
+
+/** How often everyone gets the whole server's list even when nothing changed. */
+const ONLINE_REFRESH_MS = 10_000;
 
 const FACINGS: Facing[] = ["up", "down", "left", "right"];
 
@@ -163,6 +167,19 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     for (const slug of rooms.keys()) broadcast(slug, message, exceptId);
   };
 
+  /** Everyone on the server, with where they are — the People panel's list. */
+  const onlineList = () => {
+    const people: OnlineMessage["people"] = [];
+    for (const [slug, room] of rooms) {
+      for (const player of room.hub.snapshot()) {
+        if (player.resident) continue;
+        people.push({ id: player.id, name: player.name, spriteKey: player.spriteKey, room: slug });
+      }
+    }
+    return people;
+  };
+  const broadcastOnline = () => broadcastAll({ type: "online", people: onlineList() });
+
   /** Tell the room about badges just earned, so it is a shared moment. */
   const announce = (slug: string, earned: EarnedAchievement[]) => {
     for (const item of earned) {
@@ -207,6 +224,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
     // An empty room costs nothing to forget; its contents live in the store
     if (room.sockets.size === 0 && room.hub.count === 0) rooms.delete(slug);
+    if (player) broadcastOnline();
   };
 
   /**
@@ -297,8 +315,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         role: "player",
         content: text,
         actorName: author.name,
+        authorId: author.id,
         timestamp: said.at,
         sessionKey: store.getSnapshot(slug).activeSessionKey ?? "main",
+        // Room talk, so it stays in view whichever session is being read
+        roomChat: true,
       });
     } catch (err) {
       log.warn("could not keep what was said:", (err as Error).message);
@@ -336,6 +357,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
   // One timer for every room rather than one per player
   const ticker = setInterval(() => {
+    let anyoneGone = false;
     for (const [slug, room] of rooms) {
       for (const gone of room.hub.sweep()) {
         log.info(`${gone.name} timed out of "${slug}"`);
@@ -343,13 +365,19 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         room.sockets.delete(gone.id);
         roomOf.delete(gone.id);
         broadcast(slug, { type: "left", id: gone.id, name: gone.name });
+        anyoneGone = true;
       }
 
       if (room.hub.count === 0) continue;
       broadcast(slug, { type: "presence", players: room.hub.snapshot() });
     }
+    if (anyoneGone) broadcastOnline();
   }, TICK_MS);
   ticker.unref?.();
+
+  // The whole server's list, now and then regardless, so nobody's copy drifts.
+  const onlineTicker = setInterval(broadcastOnline, ONLINE_REFRESH_MS);
+  onlineTicker.unref?.();
 
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (req.url !== path) return;
@@ -387,6 +415,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
                 players: room.hub.snapshot(),
                 capacity: room.hub.capacity,
               });
+              send(ws, { type: "online", people: onlineList() });
               return;
             }
           }
@@ -421,6 +450,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             capacity: room.hub.capacity,
           });
           broadcast(slug, { type: "joined", player: result.player }, id);
+          broadcastOnline();
           recordActivity(slug, {
             kind: "human",
             actor: result.player.name,
@@ -566,6 +596,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
   server.on("close", () => {
     clearInterval(ticker);
+    clearInterval(onlineTicker);
     clearInterval(heartbeat);
     stopResidents();
   });

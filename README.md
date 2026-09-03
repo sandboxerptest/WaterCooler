@@ -251,6 +251,10 @@ a door or onto the ferry moves you to that place's room, and the people in
 both places see you go and arrive. The agents are shared too: a task one
 person assigns is seen by everyone in that room.
 
+The People tab in the side panel lists everyone on the server and where
+they are — by lobby, floor, campus, island or the world map — with the place
+you are in first.
+
 ### The island across the water
 
 The bottom of the world map is the sea. The centre avenue carries on past

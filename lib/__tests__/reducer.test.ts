@@ -1027,6 +1027,54 @@ describe("reducer", () => {
   });
 
   describe("HYDRATE_SESSION_CHAT", () => {
+    it("keeps the room's talk and other people's signed tasks when a session comes in from the gateway", () => {
+      const at = (n: number) => new Date(1_700_000_000_000 + n * 1000).toISOString();
+      const base = { runId: "", sessionKey: "main" };
+      const state = {
+        ...initialState,
+        chatMessages: [
+          {
+            ...base,
+            id: "a",
+            role: "user",
+            content: "mine",
+            timestamp: at(1),
+            authorId: "me",
+            actorName: "Ann",
+          },
+          {
+            ...base,
+            id: "b",
+            role: "player",
+            content: "hello all",
+            timestamp: at(2),
+            actorName: "Bob",
+            roomChat: true,
+          },
+          {
+            ...base,
+            id: "c",
+            role: "user",
+            content: "bob's task",
+            timestamp: at(3),
+            authorId: "bob",
+            actorName: "Bob",
+          },
+          { ...base, id: "d", role: "assistant", content: "stale reply", timestamp: at(4) },
+        ] as ChatMessage[],
+      };
+      const next = reducer(state, {
+        type: "HYDRATE_SESSION_CHAT",
+        sessionKey: "main",
+        chatMessages: [
+          { ...base, id: "g1", role: "user", content: "mine", timestamp: at(1) },
+          { ...base, id: "g2", role: "user", content: "bob's task", timestamp: at(3) },
+          { ...base, id: "g3", role: "assistant", content: "fresh reply", timestamp: at(5) },
+        ] as ChatMessage[],
+      });
+      expect(next.chatMessages.map((m) => m.id)).toEqual(["a", "b", "c", "g3"]);
+    });
+
     it("replaces chat messages for a specific session and filters connection messages", () => {
       state = makeState({
         chatMessages: [
