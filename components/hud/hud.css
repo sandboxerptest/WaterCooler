@@ -1714,6 +1714,11 @@
   color: var(--pixel-muted);
 }
 
+.people__mic {
+  display: inline-flex;
+  color: var(--pixel-green);
+}
+
 .badges {
   display: flex;
   flex-direction: column;

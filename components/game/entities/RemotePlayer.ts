@@ -14,6 +14,11 @@ import type { PresencePlayer } from "@/lib/presence-types";
  * walking through each other.
  */
 
+/** Whether a texture has been cut into character frames, not just loaded. */
+function sliced(scene: Phaser.Scene, key: string): boolean {
+  return scene.textures.exists(key) && scene.textures.get(key).frameTotal > 1;
+}
+
 /** How quickly the sprite closes the gap to its reported position. */
 const INTERPOLATION_MS = 100;
 
@@ -133,8 +138,12 @@ export class RemotePlayer {
    */
   private wear(spriteKey: string) {
     const scene = this.sprite.scene;
-    const key =
-      spriteKey !== SPRITE_KEY && scene.textures.exists(spriteKey) ? spriteKey : SPRITE_KEY;
+    // A sheet counts only once it has been cut into frames: between the
+    // loader adding the texture and the frames being cut there is a moment
+    // when it exists but has nothing to animate, and wearing it then would
+    // fail half-way through, leaving a sprite nobody owns. The default look
+    // fills in until the next roster.
+    const key = spriteKey !== SPRITE_KEY && sliced(scene, spriteKey) ? spriteKey : SPRITE_KEY;
     const prefix = key === SPRITE_KEY ? "" : `${key}:`;
     if (prefix === this.prefix && this.sprite.texture.key === key) return;
     if (key !== SPRITE_KEY) ensureAnims(scene, key);
@@ -148,7 +157,8 @@ export class RemotePlayer {
     this.facing = facing;
     const key = `${this.prefix}${moving ? "walk" : "idle"}-${facing}`;
     if (key === this.currentAnim) return;
-    if (!this.sprite.scene.anims.exists(key)) return;
+    const anim = this.sprite.scene.anims.get(key);
+    if (!anim || anim.frames.length === 0) return;
     this.currentAnim = key;
     this.sprite.anims.play(key, true);
   }

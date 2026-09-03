@@ -1,6 +1,9 @@
 import * as Phaser from "phaser";
 import { RemotePlayer } from "../entities/RemotePlayer";
 import type { PresencePlayer } from "@/lib/presence-types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("RemotePlayers");
 
 /** Keeps the set of remote characters in step with the server's roster. */
 export class RemotePlayerManager {
@@ -26,8 +29,14 @@ export class RemotePlayerManager {
       const existing = this.players.get(incoming.id);
       if (existing) {
         existing.setTarget(incoming);
-      } else {
+        continue;
+      }
+      // If making one fails, say so once and try again on the next roster,
+      // rather than leaving a trail of half-made sprites across the map.
+      try {
         this.players.set(incoming.id, new RemotePlayer(this.scene, incoming, this.options));
+      } catch (err) {
+        log.warn(`could not draw ${incoming.name}:`, (err as Error).message);
       }
     }
 

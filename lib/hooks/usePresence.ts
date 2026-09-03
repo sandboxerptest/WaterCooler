@@ -46,13 +46,13 @@ export function usePresence() {
     };
 
     /** Walk into the place the address bar names, standing where the scene put us. */
-    const join = (spawn: { x: number; y: number; facing: Facing } | null) => {
+    const join = (spawn: { x: number; y: number; facing: Facing } | null, look?: string) => {
       joinedRef.current = false;
       sendRoom({
         type: "join",
         room: currentRoom(),
         name: loadPlayerName(),
-        spriteKey: rememberedCharacter()?.key ?? SPRITE_KEY,
+        spriteKey: look ?? rememberedCharacter()?.key ?? SPRITE_KEY,
         x: spawn?.x ?? 0,
         y: spawn?.y ?? 0,
         facing: spawn?.facing ?? "down",
@@ -117,8 +117,16 @@ export function usePresence() {
       sendRoom({ type: "move", ...next });
     });
 
+    // A new look goes out with a fresh join, so everyone sees it at once
+    // rather than on the next walk through a door.
+    // The event carries the key: the choice is remembered a moment later.
+    const unsubLook = gameEvents.on("player-sprite-chosen", (spriteKey) => {
+      if (joinedRef.current) join(latestRef.current, spriteKey);
+    });
+
     return () => {
       unsubOpen();
+      unsubLook();
       unsubPlace();
       unsubMessage();
       unsubscribeMove();

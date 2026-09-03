@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Mic } from "lucide-react";
 import CharacterPortrait from "./CharacterPortrait";
 import { useOnline } from "@/lib/presence-online";
 import { getSelfId } from "@/lib/presence-self";
@@ -86,6 +87,11 @@ export default function PeoplePanel() {
                 <div className="people__who">
                   <span className="people__name">{person.name}</span>
                   {person.id === me && <span className="people__me">you</span>}
+                  {person.mic && (
+                    <span className="people__mic" title="Microphone on">
+                      <Mic size={9} />
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

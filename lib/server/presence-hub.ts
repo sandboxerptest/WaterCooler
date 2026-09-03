@@ -20,6 +20,7 @@ import {
 interface TrackedPlayer extends PresencePlayer {
   lastSeen: number;
   lastMoveAt: number;
+  mic?: boolean;
 }
 
 export interface JoinRequest {
@@ -96,7 +97,10 @@ export class PresenceHub {
    * on where a person is — through a door, off a ferry — so unlike a move it
    * is not held to walking speed from wherever they were before.
    */
-  place(id: string, at: { x: number; y: number; facing: Facing }): PresencePlayer | null {
+  place(
+    id: string,
+    at: { x: number; y: number; facing: Facing; name?: string; spriteKey?: string },
+  ): PresencePlayer | null {
     const player = this.players.get(id);
     if (!player) return null;
     if (!Number.isFinite(at.x) || !Number.isFinite(at.y)) return strip(player);
@@ -104,10 +108,19 @@ export class PresenceHub {
     player.x = at.x;
     player.y = at.y;
     player.facing = at.facing;
+    // A new look or name comes with a fresh join too.
+    if (at.name) player.name = sanitiseName(at.name);
+    if (at.spriteKey) player.spriteKey = at.spriteKey;
     player.moving = false;
     player.lastSeen = now;
     player.lastMoveAt = now;
     return strip(player);
+  }
+
+  /** Their microphone went on or off. */
+  setMic(id: string, on: boolean): void {
+    const player = this.players.get(id);
+    if (player) player.mic = on;
   }
 
   leave(id: string): PresencePlayer | null {
@@ -194,5 +207,6 @@ function strip(player: TrackedPlayer): PresencePlayer {
     facing: player.facing,
     moving: player.moving,
     ...(player.resident ? { resident: true } : {}),
+    ...(player.mic ? { mic: true } : {}),
   };
 }

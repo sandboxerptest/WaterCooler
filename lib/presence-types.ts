@@ -41,6 +41,8 @@ export interface PresencePlayer {
   moving: boolean;
   /** An agent the server walks about, not a person; never counts as one. */
   resident?: boolean;
+  /** Their microphone is on for voice chat. */
+  mic?: boolean;
 }
 
 // ── Client → server ────────────────────────────────────
@@ -127,6 +129,12 @@ export type VoiceSignal =
   | { kind: "answer"; sdp: string }
   | { kind: "ice"; candidate: Record<string, unknown> };
 
+/** The microphone went on or off, so the room can count who is on voice. */
+export interface MicMessage {
+  type: "mic";
+  on: boolean;
+}
+
 /** A handshake step on its way to one other player in the room. */
 export interface VoiceRelayMessage {
   type: "voice";
@@ -141,7 +149,8 @@ export type ClientMessage =
   | SayMessage
   | BoardMessage
   | PongRelayMessage
-  | VoiceRelayMessage;
+  | VoiceRelayMessage
+  | MicMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -158,6 +167,7 @@ export interface OnlinePerson {
   name: string;
   spriteKey: string;
   room: string;
+  mic?: boolean;
 }
 
 /**
@@ -285,7 +295,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "say" ||
     type === "board" ||
     type === "pong" ||
-    type === "voice"
+    type === "voice" ||
+    type === "mic"
   );
 }
 

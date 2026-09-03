@@ -50,15 +50,21 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
 
   const voice = useVoice();
   const micOn = voice.status === "on";
+  const trouble =
+    (voice.connecting ? ` ${voice.connecting} still connecting.` : "") +
+    (voice.failed
+      ? ` ${voice.failed} could not be reached — those networks need a relay (TURN) to talk.`
+      : "");
+  const here = `${voice.withMic} of ${voice.humansHere} here have a microphone on.`;
   const micTitle =
     voice.status === "on"
       ? voice.peers
-        ? `Microphone on — ${voice.inEarshot} of ${voice.peers} on voice within earshot. Click to switch off.`
-        : "Microphone on — nobody else here is on voice yet. Click to switch off."
+        ? `Microphone on — ${here} ${voice.inEarshot} of ${voice.peers} connected are within earshot.${trouble} Click to switch off.`
+        : `Microphone on — ${here}${voice.withMic > 1 ? "" : " The others need to switch theirs on too."}${trouble} Click to switch off.`
       : voice.status === "requesting"
         ? "Asking for the microphone…"
         : (voice.reason ??
-          `Switch on voice chat: people near you in the room will hear you. On a controller, hold ${talk} to talk.`);
+          `${voice.withMic > 0 ? `${here} ` : ""}Switch on voice chat: people near you in the room will hear you. On a controller, hold ${talk} to talk.`);
 
   const totalSeats = seats.length;
   const assignedSeats = seats.filter((s) => s.assigned).length;
@@ -108,8 +114,8 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         <span>
           {voice.status === "requesting"
             ? "mic…"
-            : micOn
-              ? `voice ${voice.inEarshot}/${voice.peers}`
+            : voice.withMic > 0
+              ? `${voice.withMic}/${voice.humansHere} on mic`
               : "voice off"}
         </span>
       </button>

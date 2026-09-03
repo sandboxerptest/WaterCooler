@@ -3,7 +3,17 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { voiceChat, type VoiceView } from "../voice/voice-chat";
 
-const OFF: VoiceView = { status: "off", peers: 0, inEarshot: 0, speaking: false, reason: null };
+const OFF: VoiceView = {
+  status: "off",
+  peers: 0,
+  inEarshot: 0,
+  withMic: 0,
+  humansHere: 1,
+  connecting: 0,
+  failed: 0,
+  speaking: false,
+  reason: null,
+};
 
 /** Keep voice chat listening to the room while mounted, and read its state. */
 export function useVoice(): VoiceView {

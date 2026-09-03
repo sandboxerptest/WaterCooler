@@ -35,6 +35,9 @@ export function ensureSheet(
  * The texture must already be loaded.
  */
 export function ensureAnims(scene: Phaser.Scene, spriteKey: string) {
+  // Nothing to make from a sheet that has not been cut yet; an animation
+  // with no frames is worse than none, since it can never be replaced.
+  if (!scene.textures.exists(spriteKey) || scene.textures.get(spriteKey).frameTotal <= 1) return;
   for (const anim of [
     ...makeAnims(spriteKey, "idle", 1, 8),
     ...makeAnims(spriteKey, "walk", 2, 10),

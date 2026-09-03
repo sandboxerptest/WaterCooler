@@ -45,6 +45,27 @@ describe("capacity", () => {
     expect(hub.place("nobody", { x: 0, y: 0, facing: "down" })).toBeNull();
   });
 
+  it("remembers whose microphone is on, and says so in the roster", () => {
+    join("p0");
+    join("p1");
+    hub.setMic("p0", true);
+    const roster = hub.snapshot();
+    expect(roster.find((p) => p.id === "p0")?.mic).toBe(true);
+    expect(roster.find((p) => p.id === "p1")?.mic).toBeUndefined();
+    hub.setMic("p0", false);
+    expect(hub.snapshot().find((p) => p.id === "p0")?.mic).toBeUndefined();
+    hub.setMic("nobody", true);
+  });
+
+  it("takes a new look and name along with the place", () => {
+    join("p0");
+    hub.place("p0", { x: 5, y: 5, facing: "down", spriteKey: "character_coop", name: "  Coop " });
+    expect(hub.snapshot().find((p) => p.id === "p0")).toMatchObject({
+      spriteKey: "character_coop",
+      name: "Coop",
+    });
+  });
+
   it("frees a slot when someone leaves", () => {
     for (let i = 0; i < MAX_HUMAN_PLAYERS; i++) join(`p${i}`);
     hub.leave("p0");

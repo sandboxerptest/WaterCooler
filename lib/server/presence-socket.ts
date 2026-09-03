@@ -173,7 +173,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     for (const [slug, room] of rooms) {
       for (const player of room.hub.snapshot()) {
         if (player.resident) continue;
-        people.push({ id: player.id, name: player.name, spriteKey: player.spriteKey, room: slug });
+        people.push({
+          id: player.id,
+          name: player.name,
+          spriteKey: player.spriteKey,
+          room: slug,
+          ...(player.mic ? { mic: true } : {}),
+        });
       }
     }
     return people;
@@ -408,7 +414,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
                 x: coerceNumber(parsed.x, player.x),
                 y: coerceNumber(parsed.y, player.y),
                 facing: coerceFacing(parsed.facing),
+                name: typeof parsed.name === "string" ? parsed.name : undefined,
+                spriteKey: typeof parsed.spriteKey === "string" ? parsed.spriteKey : undefined,
               });
+              broadcastOnline();
               send(ws, {
                 type: "welcome",
                 you: id,
@@ -538,11 +547,21 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           return;
         }
 
+        if (parsed.type === "mic") {
+          // Who is on voice is part of presence, so the room can count it
+          // and a late arrival sees it without a handshake.
+          room.hub.setMic(id, parsed.on === true);
+          broadcastOnline();
+          return;
+        }
+
         if (parsed.type === "voice") {
           // The same post box, for the voice handshake: checked, addressed
           // to someone in this room, and passed on unread.
           const to = typeof parsed.to === "string" ? parsed.to : "";
           if (!to || to === id || !isVoiceSignal(parsed.signal)) return;
+          if (parsed.signal.kind === "hello") room.hub.setMic(id, true);
+          if (parsed.signal.kind === "bye") room.hub.setMic(id, false);
           if (roomOf.get(to) !== slug) return;
           const target = room.sockets.get(to);
           if (!target || target.readyState !== target.OPEN) return;

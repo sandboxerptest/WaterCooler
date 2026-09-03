@@ -34,6 +34,14 @@ export interface VoiceView {
   peers: number;
   /** Of those, how many are close enough to hear. */
   inEarshot: number;
+  /** People in this place with a microphone on, counting this browser's. */
+  withMic: number;
+  /** People in this place, counting this browser's. */
+  humansHere: number;
+  /** People still being connected to. */
+  connecting: number;
+  /** People the connection could not be made to at all — usually a network that needs a relay. */
+  failed: number;
   /** Whether this browser's own microphone is picking up speech. */
   speaking: boolean;
   /** Why the microphone could not be used, when it could not. */
@@ -63,7 +71,6 @@ interface Peer {
   /** Keeps Chrome decoding the stream; Web Audio does the actual playing. */
   sink: HTMLAudioElement | null;
   source: MediaStreamAudioSourceNode | null;
-  gain: GainNode | null;
   analyser: AnalyserNode | null;
   /** ICE that arrived before the remote description did. */
   earlyIce: RTCIceCandidateInit[];
@@ -76,6 +83,10 @@ class VoiceChat {
     status: "off",
     peers: 0,
     inEarshot: 0,
+    withMic: 0,
+    humansHere: 1,
+    connecting: 0,
+    failed: 0,
     speaking: false,
     reason: null,
   };
@@ -88,6 +99,10 @@ class VoiceChat {
   private unsubs: (() => void)[] = [];
   private attached = 0;
   private levelTimer: ReturnType<typeof setInterval> | null = null;
+  /** Connections that failed outright since the microphone came on. */
+  private failedPeers = 0;
+  /** Whom this browser has said hello to since the microphone came on. */
+  private greeted = new Set<string>();
   private levels = new Float32Array(1024);
 
   // ── For the HUD ────────────────────────────────────────
@@ -170,10 +185,15 @@ class VoiceChat {
     this.localAnalyser.fftSize = 1024;
     this.context.createMediaStreamSource(this.local).connect(this.localAnalyser);
     this.levelTimer = setInterval(() => this.pollLevels(), LEVEL_POLL_MS);
+    this.failedPeers = 0;
     this.publish({ status: "on" });
     log.info("microphone on");
-    // Tell everyone here; those with a microphone on will answer.
+    // The room counts who is on voice; then tell everyone here, and
+    // those with a microphone on will answer.
+    sendRoom({ type: "mic", on: true });
+    this.greeted = new Set(this.humans().map((p) => p.id));
     for (const player of this.humans()) this.send(player.id, { kind: "hello" });
+    this.census();
   }
 
   async disable() {
@@ -185,7 +205,17 @@ class VoiceChat {
     this.local?.getTracks().forEach((track) => track.stop());
     this.local = null;
     this.localAnalyser = null;
-    this.publish({ status: "off", peers: 0, inEarshot: 0, speaking: false });
+    sendRoom({ type: "mic", on: false });
+    this.greeted.clear();
+    this.publish({
+      status: "off",
+      peers: 0,
+      inEarshot: 0,
+      connecting: 0,
+      failed: 0,
+      speaking: false,
+    });
+    this.census();
     log.info("microphone off");
   }
 
@@ -264,7 +294,6 @@ class VoiceChat {
       pc,
       sink: null,
       source: null,
-      gain: null,
       analyser: null,
       earlyIce: [],
       speaking: false,
@@ -279,7 +308,13 @@ class VoiceChat {
     };
     pc.ontrack = (event) => this.hear(id, peer, event.streams[0] ?? new MediaStream([event.track]));
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "closed") this.drop(id);
+      if (pc.connectionState === "failed") {
+        // No route between the two networks: the HUD says so, since the
+        // fix — a TURN relay — is not something a person can do mid-chat.
+        this.failedPeers += 1;
+        log.warn(`voice could not connect to ${id}; a relay (TURN) may be needed`);
+        this.drop(id);
+      } else if (pc.connectionState === "closed") this.drop(id);
       else if (pc.connectionState === "connected") log.info(`voice connected to ${id}`);
       this.count();
     };
@@ -288,19 +323,22 @@ class VoiceChat {
 
   /** Their voice arrives: play it through a gain we can turn with distance. */
   private hear(id: string, peer: Peer, stream: MediaStream) {
-    if (!this.context) return;
+    // The element is what plays: its volume is turned with distance, and it
+    // needs no audio context, which a browser may keep suspended. The
+    // context only listens, to see when they are talking.
     const sink = new Audio();
     sink.srcObject = stream;
-    sink.muted = true;
-    void sink.play().catch(() => {});
+    sink.autoplay = true;
+    sink.volume = Math.min(1, Math.max(0, peer.volume));
+    void sink.play().catch((err: Error) => log.warn(`could not play ${id}:`, err.message));
     peer.sink = sink;
-    peer.source = this.context.createMediaStreamSource(stream);
-    peer.gain = this.context.createGain();
-    peer.analyser = this.context.createAnalyser();
-    peer.analyser.fftSize = 1024;
-    peer.source.connect(peer.analyser);
-    peer.analyser.connect(peer.gain);
-    peer.gain.connect(this.context.destination);
+    if (this.context) {
+      if (this.context.state === "suspended") void this.context.resume();
+      peer.source = this.context.createMediaStreamSource(stream);
+      peer.analyser = this.context.createAnalyser();
+      peer.analyser.fftSize = 1024;
+      peer.source.connect(peer.analyser);
+    }
     this.updateVolumes();
     log.info(`hearing ${id}`);
   }
@@ -311,7 +349,6 @@ class VoiceChat {
     this.peers.delete(id);
     if (peer.speaking) gameEvents.emit("voice-speaking", id, false);
     peer.source?.disconnect();
-    peer.gain?.disconnect();
     if (peer.sink) peer.sink.srcObject = null;
     peer.pc.onicecandidate = null;
     peer.pc.ontrack = null;
@@ -322,32 +359,63 @@ class VoiceChat {
 
   /** The roster changed: greet anyone new, forget anyone gone. */
   private roster() {
+    this.census();
     if (this.view.status !== "on") return;
-    const here = new Set(this.humans().map((p) => p.id));
+    const humans = this.humans();
+    const here = new Set(humans.map((p) => p.id));
     for (const id of [...this.peers.keys()]) if (!here.has(id)) this.drop(id);
+    // Someone new: say hello, so a person who arrives after the microphone
+    // went on is connected to as well.
+    for (const player of humans) {
+      if (this.greeted.has(player.id)) continue;
+      this.greeted.add(player.id);
+      this.send(player.id, { kind: "hello" });
+    }
+    for (const id of [...this.greeted]) if (!here.has(id)) this.greeted.delete(id);
     this.updateVolumes();
+  }
+
+  /** How many are here, and how many of them are on voice — this browser included. */
+  private census() {
+    const humans = this.humans();
+    const on = this.view.status === "on";
+    const patch = {
+      humansHere: humans.length + 1,
+      withMic: humans.filter((p) => p.mic).length + (on ? 1 : 0),
+    };
+    if (patch.humansHere !== this.view.humansHere || patch.withMic !== this.view.withMic) {
+      this.publish(patch);
+    }
   }
 
   // ── Distance ───────────────────────────────────────────
 
   private updateVolumes() {
-    if (!this.me || !this.context) return;
+    if (!this.me) return;
     const players = getPlayers();
     for (const [id, peer] of this.peers) {
       const them = players.find((p) => p.id === id);
       peer.volume = them ? volumeAt(distanceBetween(this.me, them)) : 0;
-      peer.gain?.gain.setTargetAtTime(peer.volume, this.context.currentTime, 0.08);
+      if (peer.sink) peer.sink.volume = Math.min(1, Math.max(0, peer.volume));
     }
     this.count();
   }
 
   private count() {
-    const connected = [...this.peers.values()].filter((p) => p.pc.connectionState === "connected");
+    const all = [...this.peers.values()];
+    const connected = all.filter((p) => p.pc.connectionState === "connected");
     const patch = {
       peers: connected.length,
       inEarshot: connected.filter((p) => p.volume > 0).length,
+      connecting: all.filter((p) => ["new", "connecting"].includes(p.pc.connectionState)).length,
+      failed: this.failedPeers,
     };
-    if (patch.peers !== this.view.peers || patch.inEarshot !== this.view.inEarshot) {
+    if (
+      patch.peers !== this.view.peers ||
+      patch.inEarshot !== this.view.inEarshot ||
+      patch.connecting !== this.view.connecting ||
+      patch.failed !== this.view.failed
+    ) {
       this.publish(patch);
     }
   }

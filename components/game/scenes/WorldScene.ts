@@ -175,7 +175,14 @@ export class WorldScene extends Phaser.Scene {
     );
     // Stopped for another scene, or taken down with the game: either way
     // the listeners go, or a dead scene keeps trying to draw people.
+    // A new look chosen out here is put on at once, as it is indoors.
+    const unsubLook = gameEvents.on("player-sprite-chosen", (spriteKey, spritePath) => {
+      ensureSheet(this, spriteKey, spritePath, (ok) => {
+        if (ok && this.scene.isActive()) this.player.wearSprite(this, spriteKey);
+      });
+    });
     const letGo = () => {
+      unsubLook();
       this.presence?.detach();
       this.presence = null;
     };
